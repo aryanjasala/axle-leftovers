@@ -4,7 +4,9 @@ name: Signatures
 # installs) and publishes it to the orphan `signatures` branch, where the plugin
 # downloads it from raw.githubusercontent.com on request. Incremental: the branch
 # keeps state.json (slug to version), and a run only downloads plugins whose
-# version changed. Not a release, and nothing lands on main.
+# version changed. The branch never grows: each run reads the previous state, then
+# replaces the branch with one fresh orphan commit holding only the latest files.
+# Not a release, and nothing lands on main.
 
 on:
   schedule:
@@ -35,6 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The push at the end needs the token.
           persist-credentials: true
 
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
@@ -43,15 +46,14 @@ jobs:
           extensions: curl, zip, zlib
           coverage: none
 
-      - name: Check out the signatures branch
+      - name: Read the previous signatures branch
+        # Only to carry the state over. The branch itself is replaced below.
         run: |
           if git ls-remote --exit-code --heads origin signatures > /dev/null; then
             git fetch --depth=1 origin signatures
-            git worktree add signatures-branch FETCH_HEAD
-            git -C signatures-branch checkout -B signatures
+            git worktree add --detach signatures-branch FETCH_HEAD
           else
             git worktree add --detach signatures-branch
-            git -C signatures-branch checkout --orphan signatures
             git -C signatures-branch rm -rf --quiet .
           fi
 
@@ -69,7 +71,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish to the signatures branch
+      - name: Replace the signatures branch with one fresh commit
         working-directory: signatures-branch
         run: |
           cat > README.md <<'README'
@@ -82,6 +84,8 @@ jobs:
           README
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # A new root commit: the history of earlier runs is dropped.
+          git checkout --orphan signatures-fresh
           git add -A
           git commit -m "chore: rebuild signatures $(date -u +%Y-%m-%d)"
-          git push origin signatures
+          git push --force origin signatures-fresh:signatures
