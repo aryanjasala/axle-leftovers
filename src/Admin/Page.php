@@ -608,7 +608,7 @@ final class Page implements Service {
 			'runtime_ledger'  => array( __( 'Runtime ledger', 'axle-leftovers' ), __( 'Record which plugin creates new tables, options, cron events, roles and capabilities', 'axle-leftovers' ) ),
 			'track_meta_keys' => array( __( 'Meta keys', 'axle-leftovers' ), __( 'Also record new post, user, term and comment meta keys', 'axle-leftovers' ) ),
 			'online_lookup'   => array( __( 'Online lookup', 'axle-leftovers' ), __( 'Show a Look it up button for Unknown items. It sends the item name to veloria.dev, which searches the code of every WordPress.org plugin', 'axle-leftovers' ) ),
-			'remote_dataset'  => array( __( 'Full list', 'axle-leftovers' ), __( 'Allow downloading the full signature list (about 10,000 plugins) from GitHub. It sends nothing from this site', 'axle-leftovers' ) ),
+			'remote_dataset'  => array( __( 'Full list', 'axle-leftovers' ), __( 'Allow downloading the full signature list (about 10,000 plugins) from GitHub. It sends nothing from this site. A list you already downloaded stays in use when this is off, and no request is made. Delete downloaded list removes it', 'axle-leftovers' ) ),
 		);
 		foreach ( $checks as $key => $labels ) {
 			echo '<tr><th scope="row">' . esc_html( $labels[0] ) . '</th><td><label><input type="checkbox" name="' . esc_attr( $key ) . '" value="1"' . checked( $settings[ $key ], true, false ) . '> ' . esc_html( $labels[1] ) . '</label></td></tr>';
@@ -620,7 +620,7 @@ final class Page implements Service {
 	}
 
 	/**
-	 * The signature list: what is loaded, and the download and remove buttons.
+	 * The signature list: what is loaded, and the download and delete buttons.
 	 */
 	private function render_dataset(): void {
 		$info = ( new Dataset() )->info();
@@ -631,7 +631,9 @@ final class Page implements Service {
 		echo '<li class="alo-dataset-bundled">' . esc_html( sprintf( __( 'Bundled list: %1$s plugins, built %2$s.', 'axle-leftovers' ), number_format_i18n( $info['bundled_count'] ), '' !== $info['bundled_built'] ? $info['bundled_built'] : __( 'on an unknown date', 'axle-leftovers' ) ) ) . '</li>';
 		if ( $info['downloaded'] ) {
 			/* translators: 1: number of plugins, 2: build date, 3: download date. */
-			echo '<li class="alo-dataset-full">' . esc_html( sprintf( __( 'Full list: %1$s plugins, built %2$s, downloaded %3$s.', 'axle-leftovers' ), number_format_i18n( (int) $info['downloaded']['count'] ), $info['downloaded']['built'], Display::date( (string) ( $info['downloaded']['fetched_gmt'] ?? '' ) ) ) ) . '</li>';
+			echo '<li class="alo-dataset-full">' . esc_html( sprintf( __( 'Full list: %1$s plugins, built %2$s, downloaded %3$s.', 'axle-leftovers' ), number_format_i18n( (int) $info['downloaded']['count'] ), $info['downloaded']['built'], Display::date( (string) ( $info['downloaded']['fetched_gmt'] ?? '' ) ) ) );
+			$this->action_form( 'dataset_remove', __( 'Delete downloaded list', 'axle-leftovers' ), false, __( 'Delete the downloaded list? The bundled list is used instead. You can download it again later.', 'axle-leftovers' ) );
+			echo '</li>';
 		} else {
 			echo '<li class="alo-dataset-full">' . esc_html__( 'Full list: not downloaded.', 'axle-leftovers' ) . '</li>';
 		}
@@ -642,9 +644,6 @@ final class Page implements Service {
 			$this->action_form( 'dataset_download', $info['downloaded'] ? __( 'Update the full list', 'axle-leftovers' ) : __( 'Download the full list', 'axle-leftovers' ), false );
 		} else {
 			echo '<p class="description">' . esc_html__( 'To download the full list, allow it above and save the settings.', 'axle-leftovers' ) . '</p>';
-		}
-		if ( $info['downloaded'] ) {
-			$this->action_form( 'dataset_remove', __( 'Remove the full list', 'axle-leftovers' ), false );
 		}
 		echo '</div>';
 	}
@@ -669,11 +668,12 @@ final class Page implements Service {
 	 * @param string $action  Action.
 	 * @param string $label   Button label.
 	 * @param bool   $network Network screen.
+	 * @param string $confirm Question to ask before submitting. Default: none.
 	 */
-	private function action_form( string $action, string $label, bool $network ): void {
+	private function action_form( string $action, string $label, bool $network, string $confirm = '' ): void {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form alo-' . esc_attr( $action ) . '-form">';
 		$this->hidden( $action, $network );
-		echo '<button type="submit" class="button">' . esc_html( $label ) . '</button>';
+		echo '<button type="submit" class="button"' . ( '' !== $confirm ? ' data-alo-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>' . esc_html( $label ) . '</button>';
 		echo '</form>';
 	}
 
@@ -831,7 +831,7 @@ final class Page implements Service {
 			case 'dataset_remove':
 				$tab = 'settings';
 				$this->updater->remove();
-				$this->set_flash( 'success', __( 'Removed the full list. The bundled list is used.', 'axle-leftovers' ) );
+				$this->set_flash( 'success', __( 'Deleted the downloaded list. The bundled list is used.', 'axle-leftovers' ) );
 				break;
 
 			case 'settings':

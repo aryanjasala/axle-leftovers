@@ -42,7 +42,7 @@ It downloads each plugin's latest zip once into the cache folder and keeps the f
 
 About 10,000 plugins, built on GitHub and downloaded on request. The `Signatures` workflow (`.github/workflows/signatures.yml`, monthly and on demand) runs `bin/build-signatures.php --publish-dir=...` and commits the result to the orphan branch `signatures`: `signatures.json.gz`, `signatures.json.gz.sha256` and `state.json` (slug to version). A run reads the last `state.json` and signatures and downloads only plugins whose version changed or that are new. Each zip is scanned and deleted at once. A plugin that fails to download keeps its old data and is retried next run. `--max-minutes` stops starting downloads after a while and the next run carries on.
 
-On a site, Settings > Signature list (or `wp axle-leftovers dataset download`) fetches the file from `raw.githubusercontent.com`, rejects it unless it is under the size limit, matches the checksum file, unpacks, and has the shape `{ version: 1, built, plugins: { slug: { name, t, o, c, m, r, u, p, n } } }`, then stores it in `uploads/axle-leftovers/dataset/`. It is merged with the bundled list: the downloaded entry wins for a slug in both, the bundled list fills the rest. Remove it to go back to the bundled list. Both the setting and the download are off by default.
+On a site, Settings > Signature list (or `wp axle-leftovers dataset download`) fetches the file from `raw.githubusercontent.com`, rejects it unless it is under the size limit, matches the checksum file, unpacks, and has the shape `{ version: 1, built, plugins: { slug: { name, t, o, c, m, r, u, p, n } } }`, then stores it in `uploads/axle-leftovers/dataset/`. It is merged with the bundled list: the downloaded entry wins for a slug in both, the bundled list fills the rest. Delete it (Settings > Delete downloaded list, `wp axle-leftovers dataset delete`, or the `axle-leftovers/delete-dataset` ability) to go back to the bundled list. A downloaded list stays in use when the setting is turned off, with no network calls. Both the setting and the download are off by default.
 
 ### The online lookup (opt-in)
 
@@ -114,7 +114,7 @@ add_filter( 'axle_leftovers_can_trash', function ( $allowed, $item ) {
 | `axle_leftovers_purged` | `array[] $rows` |
 | `axle_leftovers_lookup_done` | `array $result, string $type, string $name` (also when nothing matched) |
 | `axle_leftovers_dataset_downloaded` | `array $meta` (built, count, fetched_gmt, size, sha256) |
-| `axle_leftovers_dataset_removed` | |
+| `axle_leftovers_dataset_removed` | (the downloaded list was deleted) |
 
 Example: log every trash in your own audit log.
 
@@ -156,6 +156,7 @@ $who = \AryanX\Axle\Leftovers\owner_of( 'option', 'acme_settings' );
 | `axle-leftovers/rescan` | not readonly | `rescan_signatures` |
 | `axle-leftovers/lookup-item` | not readonly, idempotent | `type`, `name`, `refresh` |
 | `axle-leftovers/download-dataset` | not readonly, idempotent | |
+| `axle-leftovers/delete-dataset` | destructive, idempotent | |
 
 Permission: the `axle_leftovers_capability` capability.
 
@@ -177,7 +178,7 @@ Permission: the `axle_leftovers_capability` capability.
 | `wp axle-leftovers trash purge [--older-than=<days>] [--yes]` | Delete for good |
 | `wp axle-leftovers ledger list [--format=]` / `ledger show <slug>` | Plugins seen |
 | `wp axle-leftovers lookup <type> <name> [--refresh] [--format=]` | Online lookup of an Unknown item (needs the setting) |
-| `wp axle-leftovers dataset download\|status\|remove` | The full signature list (download needs the setting) |
+| `wp axle-leftovers dataset download\|status\|delete` | The full signature list (download needs the setting) |
 
 ## Site Health
 

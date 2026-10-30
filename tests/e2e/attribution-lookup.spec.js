@@ -179,11 +179,40 @@ test.describe( 'Online lookup and the full list', () => {
 		expect( status ).toContain( 'Full list: 3 plugins, built 2026-10-01' );
 
 		await page.reload();
-		await page.getByRole( 'button', { name: 'Remove the full list' } ).click();
-		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Removed the full list' );
+		page.once( 'dialog', ( dialog ) => dialog.accept() );
+		await page.getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted the downloaded list' );
 		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
 		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'no' );
 		expect( seed.succeeds( 'option', 'get', 'axle_leftovers_dataset_meta' ) ).toBe( false );
+	} );
+
+	test( 'Delete downloaded list asks first, works with the setting off, and falls back to the bundled list', async ( { page } ) => {
+		test.skip( process.env.WP_LEG && 'latest' !== process.env.WP_LEG, 'Latest WordPress only.' );
+		seed.makeLookupItems();
+		wp( 'axle-leftovers', 'dataset', 'download' );
+		wpEval( '$s = get_option( "axle_leftovers_settings", array() ); $s["remote_dataset"] = false; update_option( "axle_leftovers_settings", $s );' );
+		await page.goto( SETTINGS );
+		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins, built 2026-10-01' );
+		await expect( page.getByRole( 'button', { name: 'Download the full list' } ) ).toHaveCount( 0 );
+		await expect( page.locator( '#wpbody' ) ).toContainText( 'Delete downloaded list removes it' );
+
+		// Cancel keeps the list.
+		page.once( 'dialog', ( dialog ) => dialog.dismiss() );
+		await page.locator( '.alo-dataset-full' ).getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins' );
+		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'yes' );
+
+		// OK deletes it, and the bundled list is what is left.
+		page.once( 'dialog', ( dialog ) => dialog.accept() );
+		await page.locator( '.alo-dataset-full' ).getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted the downloaded list. The bundled list is used.' );
+		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
+		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( 'Bundled list:' );
+		await expect( page.getByRole( 'button', { name: 'Delete downloaded list' } ) ).toHaveCount( 0 );
+		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'no' );
+		expect( wp( 'axle-leftovers', 'dataset', 'status' ) ).toContain( 'Full list: not downloaded.' );
+		expect( seed.httpLog().filter( ( line ) => line.includes( 'raw.githubusercontent.com' ) ) ).toHaveLength( 2 );
 	} );
 
 	test( 'a download that fails its checksum is discarded', async ( { page } ) => {
@@ -198,11 +227,11 @@ test.describe( 'Online lookup and the full list', () => {
 		expect( seed.succeeds( 'option', 'get', 'axle_leftovers_dataset_meta' ) ).toBe( false );
 	} );
 
-	test( 'WP-CLI: dataset download, status and remove', async () => {
+	test( 'WP-CLI: dataset download, status and delete', async () => {
 		seed.makeLookupItems();
 		expect( wp( 'axle-leftovers', 'dataset', 'download' ) ).toContain( 'Downloaded the full list: 3 plugins, built 2026-10-01.' );
 		expect( wp( 'axle-leftovers', 'dataset', 'status' ) ).toContain( 'Full list: 3 plugins' );
-		expect( wp( 'axle-leftovers', 'dataset', 'remove' ) ).toContain( 'Removed the full list' );
+		expect( wp( 'axle-leftovers', 'dataset', 'delete' ) ).toContain( 'Deleted the downloaded list' );
 		expect( wp( 'axle-leftovers', 'dataset', 'status' ) ).toContain( 'Full list: not downloaded.' );
 	} );
 

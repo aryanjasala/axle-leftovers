@@ -38,14 +38,23 @@ final class Abilities implements Service {
 	private Trash $trash;
 
 	/**
+	 * The downloaded signature list.
+	 *
+	 * @var DatasetUpdater
+	 */
+	private DatasetUpdater $updater;
+
+	/**
 	 * Sets up the abilities.
 	 *
-	 * @param Scanner $scanner Scanner.
-	 * @param Trash   $trash   Trash.
+	 * @param Scanner             $scanner Scanner.
+	 * @param Trash               $trash   Trash.
+	 * @param DatasetUpdater|null $updater Downloaded list. Default: the stored one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash ) {
+	public function __construct( Scanner $scanner, Trash $trash, ?DatasetUpdater $updater = null ) {
 		$this->scanner = $scanner;
 		$this->trash   = $trash;
+		$this->updater = $updater ?? new DatasetUpdater();
 	}
 
 	/**
@@ -408,6 +417,42 @@ final class Abilities implements Service {
 				'idempotent'  => true,
 			)
 		);
+
+		$this->ability(
+			'delete-dataset',
+			__( 'Delete the downloaded signature list', 'axle-leftovers' ),
+			__( 'Deletes the downloaded full signature list. The bundled list is used afterwards. Safe to repeat: with nothing downloaded it does nothing. Works with the download setting off.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'deleted' => array( 'type' => 'boolean' ),
+				),
+			),
+			array( $this, 'delete_dataset' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => true,
+				'idempotent'  => true,
+			)
+		);
+	}
+
+	/**
+	 * Deletes the downloaded signature list.
+	 *
+	 * @return array{deleted: bool}
+	 */
+	public function delete_dataset(): array {
+		$had = null !== DatasetUpdater::meta();
+		$this->updater->remove();
+
+		return array( 'deleted' => $had );
 	}
 
 	/**

@@ -246,8 +246,37 @@ final class DatasetUpdaterTest extends LeftoversTestCase {
 		$this->assertSame( array(), $updater->plugins() );
 	}
 
+	public function test_remove_works_with_the_setting_off_and_twice(): void {
+		$this->enable();
+		$this->github( gzencode( $this->list_json() ) );
+		$updater = new DatasetUpdater( $this->storage() );
+		$updater->download();
+		$this->options[ Settings::OPTION ]['remote_dataset'] = false;
+		$this->assertNotEmpty( $updater->plugins(), 'A downloaded list stays in use with the setting off.' );
+		Actions\expectDone( 'axle_leftovers_dataset_removed' )->twice();
+
+		$updater->remove();
+		$updater->remove();
+
+		$this->assertSame( array(), $updater->plugins() );
+		$this->assertNull( DatasetUpdater::meta() );
+	}
+
+	public function test_the_delete_ability_reports_whether_a_list_was_deleted(): void {
+		$this->enable();
+		$this->github( gzencode( $this->list_json() ) );
+		$updater = new DatasetUpdater( $this->storage() );
+		$updater->download();
+		$abilities = new Abilities( \Mockery::mock( Scanner::class ), \Mockery::mock( Trash::class ), $updater );
+		Actions\expectDone( 'axle_leftovers_dataset_removed' )->twice();
+
+		$this->assertSame( array( 'deleted' => true ), $abilities->delete_dataset() );
+		$this->assertSame( array( 'deleted' => false ), $abilities->delete_dataset() );
+		$this->assertNull( DatasetUpdater::meta() );
+	}
+
 	public function test_the_cli_dataset_command(): void {
-		$command = new Command( \Mockery::mock( Scanner::class ), \Mockery::mock( Trash::class ), \Mockery::mock( Ledger::class ) );
+		$command = new Command( \Mockery::mock( Scanner::class ), \Mockery::mock( Trash::class ), \Mockery::mock( Ledger::class ), new DatasetUpdater( $this->storage() ) );
 
 		try {
 			$command->dataset( array( 'download' ), array() );
@@ -259,6 +288,12 @@ final class DatasetUpdaterTest extends LeftoversTestCase {
 		$command->dataset( array( 'status' ), array() );
 		$lines = array_column( \WP_CLI::$lines, 1 );
 		$this->assertStringContainsString( 'Full list: not downloaded.', implode( "\n", array_map( 'strval', $lines ) ) );
+
+		Actions\expectDone( 'axle_leftovers_dataset_removed' )->twice();
+		foreach ( array( 'delete', 'remove' ) as $word ) {
+			$command->dataset( array( $word ), array() );
+			$this->assertStringContainsString( 'Deleted the downloaded list', (string) end( \WP_CLI::$lines )[1] );
+		}
 
 		$this->expectException( \RuntimeException::class );
 		$command->dataset( array( 'nonsense' ), array() );

@@ -46,16 +46,25 @@ final class Command {
 	private Ledger $ledger;
 
 	/**
+	 * The downloaded signature list.
+	 *
+	 * @var DatasetUpdater
+	 */
+	private DatasetUpdater $updater;
+
+	/**
 	 * Sets up the command.
 	 *
-	 * @param Scanner $scanner Scanner.
-	 * @param Trash   $trash   Trash.
-	 * @param Ledger  $ledger  Ledger.
+	 * @param Scanner             $scanner Scanner.
+	 * @param Trash               $trash   Trash.
+	 * @param Ledger              $ledger  Ledger.
+	 * @param DatasetUpdater|null $updater Downloaded list. Default: the stored one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash, Ledger $ledger ) {
+	public function __construct( Scanner $scanner, Trash $trash, Ledger $ledger, ?DatasetUpdater $updater = null ) {
 		$this->scanner = $scanner;
 		$this->trash   = $trash;
 		$this->ledger  = $ledger;
+		$this->updater = $updater ?? new DatasetUpdater();
 	}
 
 	/**
@@ -486,23 +495,25 @@ final class Command {
 	 *
 	 * `download` needs the download turned on in Settings. It fetches the list
 	 * from raw.githubusercontent.com, checks size, checksum and shape, and merges
-	 * it with the bundled list. Nothing from the site is sent.
+	 * it with the bundled list. Nothing from the site is sent. `delete` removes the
+	 * downloaded list and goes back to the bundled one; it works with the setting off.
 	 *
 	 * ## OPTIONS
 	 *
 	 * <action>
-	 * : download, status or remove.
+	 * : download, status, delete (or remove).
 	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp axle-leftovers dataset status
 	 *     wp axle-leftovers dataset download
+	 *     wp axle-leftovers dataset delete
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Options.
 	 */
 	public function dataset( $args, $assoc_args ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI passes both.
-		$updater = new DatasetUpdater();
+		$updater = $this->updater;
 		switch ( (string) $args[0] ) {
 			case 'download':
 				$meta = $updater->download();
@@ -512,9 +523,10 @@ final class Command {
 				}
 				WP_CLI::success( sprintf( 'Downloaded the full list: %d plugins, built %s.', $meta['count'], $meta['built'] ) );
 				break;
+			case 'delete':
 			case 'remove':
 				$updater->remove();
-				WP_CLI::success( 'Removed the full list. The bundled list is used.' );
+				WP_CLI::success( 'Deleted the downloaded list. The bundled list is used.' );
 				break;
 			case 'status':
 				$info = ( new Dataset() )->info();
@@ -523,7 +535,7 @@ final class Command {
 				WP_CLI::log( sprintf( 'In use: %d plugins.', $info['count'] ) );
 				break;
 			default:
-				WP_CLI::error( 'Use download, status or remove.' );
+				WP_CLI::error( 'Use download, status or delete.' );
 		}
 	}
 

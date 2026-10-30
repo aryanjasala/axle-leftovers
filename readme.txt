@@ -131,7 +131,7 @@ What it is: a file of the names and prefixes used by the top 10,000 plugins on W
 
 What is sent: nothing from your site. Your server asks for `signatures.json.gz` and `signatures.json.gz.sha256` from raw.githubusercontent.com, so GitHub sees your server's IP address and user agent.
 
-When: only when you click Download the full list, run `wp axle-leftovers dataset download`, or call the `axle-leftovers/download-dataset` ability. The file has a size limit, has to match its published checksum, and has to have the right shape, or it is discarded. It is stored in `wp-content/uploads/axle-leftovers/dataset` and merged with the bundled list. Remove it any time from Settings.
+When: only when you click Download the full list, run `wp axle-leftovers dataset download`, or call the `axle-leftovers/download-dataset` ability. The file has a size limit, has to match its published checksum, and has to have the right shape, or it is discarded. It is stored in `wp-content/uploads/axle-leftovers/dataset` and merged with the bundled list. Delete it any time with Delete downloaded list in Settings, `wp axle-leftovers dataset delete` or the `axle-leftovers/delete-dataset` ability. A list you downloaded stays in use if you turn the setting off, until you delete it.
 
 Terms: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
 Privacy: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
