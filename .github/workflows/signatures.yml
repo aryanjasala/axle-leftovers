@@ -1,0 +1,87 @@
+name: Signatures
+
+# Builds the full signature list (the top ~10,000 WordPress.org plugins by
+# installs) and publishes it to the orphan `signatures` branch, where the plugin
+# downloads it from raw.githubusercontent.com on request. Incremental: the branch
+# keeps state.json (slug to version), and a run only downloads plugins whose
+# version changed. Not a release, and nothing lands on main.
+
+on:
+  schedule:
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Plugins to cover, most installed first
+        default: '10000'
+      max_minutes:
+        description: Stop starting downloads after this many minutes (the next run carries on)
+        default: '300'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: signatures
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and publish
+    # Never on a fork: it would publish the fork's own branch.
+    if: github.repository == 'aryanjasala/axle-leftovers'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          extensions: curl, zip, zlib
+          coverage: none
+
+      - name: Check out the signatures branch
+        run: |
+          if git ls-remote --exit-code --heads origin signatures > /dev/null; then
+            git fetch --depth=1 origin signatures
+            git worktree add signatures-branch FETCH_HEAD
+            git -C signatures-branch checkout -B signatures
+          else
+            git worktree add --detach signatures-branch
+            git -C signatures-branch checkout --orphan signatures
+            git -C signatures-branch rm -rf --quiet .
+          fi
+
+      - name: Build the list
+        env:
+          COUNT: ${{ inputs.count || '10000' }}
+          MAX_MINUTES: ${{ inputs.max_minutes || '300' }}
+        run: |
+          php bin/build-signatures.php --count="$COUNT" --max-minutes="$MAX_MINUTES" --publish-dir=signatures-branch --parallel=8 2>&1 | tee build.log
+          {
+            echo '### Signatures'
+            echo
+            echo '```'
+            tail -n 8 build.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish to the signatures branch
+        working-directory: signatures-branch
+        run: |
+          cat > README.md <<'README'
+          # Signatures
+
+          Built by the Signatures workflow on main from the top WordPress.org plugins by installs.
+          Axle Leftovers downloads `signatures.json.gz` on request and checks it against `signatures.json.gz.sha256`.
+          `state.json` maps each plugin slug to the version last scanned, so the next run only downloads what changed.
+          Nothing here is a release. Do not edit by hand.
+          README
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "chore: rebuild signatures $(date -u +%Y-%m-%d)"
+          git push origin signatures

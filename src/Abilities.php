@@ -336,6 +336,107 @@ final class Abilities implements Service {
 				'idempotent'  => true,
 			)
 		);
+
+		$this->ability(
+			'lookup-item',
+			__( 'Look up an Unknown item online', 'axle-leftovers' ),
+			__( 'Searches the code of every WordPress.org plugin for the name of a listed leftover with no owner, through veloria.dev, and returns the plugins that name it. Needs the online lookup turned on in Settings. Sends only the item name. Results are cached and requests are spaced out.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'type'    => array( 'type' => 'string' ),
+					'name'    => array( 'type' => 'string' ),
+					'refresh' => array(
+						'type'    => 'boolean',
+						'default' => false,
+					),
+				),
+				'required'             => array( 'type', 'name' ),
+				'additionalProperties' => false,
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'confidence' => array( 'type' => 'string' ),
+					'total'      => array( 'type' => 'integer' ),
+					'candidates' => array(
+						'type'  => 'array',
+						'items' => array(
+							'type'       => 'object',
+							'properties' => array(
+								'slug'     => array( 'type' => 'string' ),
+								'name'     => array( 'type' => 'string' ),
+								'installs' => array( 'type' => 'integer' ),
+								'url'      => array( 'type' => 'string' ),
+							),
+						),
+					),
+				),
+			),
+			array( $this, 'lookup_item' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			)
+		);
+
+		$this->ability(
+			'download-dataset',
+			__( 'Download the full signature list', 'axle-leftovers' ),
+			__( 'Downloads the signatures of about 10,000 WordPress.org plugins from GitHub, checks the size, checksum and shape, and merges them with the bundled list. Needs the download turned on in Settings. Sends nothing from the site.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'built'       => array( 'type' => 'string' ),
+					'count'       => array( 'type' => 'integer' ),
+					'fetched_gmt' => array( 'type' => 'string' ),
+					'size'        => array( 'type' => 'integer' ),
+				),
+			),
+			array( $this, 'download_dataset' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			)
+		);
+	}
+
+	/**
+	 * Looks an item up online.
+	 *
+	 * @param array $input type, name, refresh.
+	 * @return array|WP_Error
+	 */
+	public function lookup_item( $input ) {
+		$input  = (array) $input;
+		$result = ( new Lookup() )->for_item( $this->scanner, (string) ( $input['type'] ?? '' ), (string) ( $input['name'] ?? '' ), ! empty( $input['refresh'] ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return array(
+			'confidence' => (string) $result['result']['confidence'],
+			'total'      => (int) $result['result']['total'],
+			'candidates' => array_values( (array) $result['result']['candidates'] ),
+		);
+	}
+
+	/**
+	 * Downloads the full signature list.
+	 *
+	 * @return array|WP_Error
+	 */
+	public function download_dataset() {
+		return ( new DatasetUpdater() )->download();
 	}
 
 	/**

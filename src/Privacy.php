@@ -182,7 +182,7 @@ final class Privacy implements Service {
 
 		$text = sprintf(
 			/* translators: %d: number of days. */
-			__( 'When an administrator cleans up data left by deleted plugins with Axle Leftovers, the data is exported and kept in a trash so it can be restored. It can include personal data, such as form entries or user settings. Trashed data and exports are not public and are deleted after %d days. The site records which administrator moved each item to the trash. Nothing is sent to other sites.', 'axle-leftovers' ),
+			__( 'When an administrator cleans up data left by deleted plugins with Axle Leftovers, the data is exported and kept in a trash so it can be restored. It can include personal data, such as form entries or user settings. Trashed data and exports are not public and are deleted after %d days. The site records which administrator moved each item to the trash. Nothing is sent to other sites, unless an administrator turns on the online lookup (it sends the name of one item to veloria.dev when someone clicks Look it up) or the full list download (it fetches a file from GitHub and sends nothing from this site). Both are off by default.', 'axle-leftovers' ),
 			Settings::retention_days()
 		);
 

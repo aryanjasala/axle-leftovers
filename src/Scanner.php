@@ -399,6 +399,43 @@ class Scanner {
 	}
 
 	/**
+	 * Works out one cached item's owner again, after a lookup gave it evidence.
+	 *
+	 * @param string $type Type.
+	 * @param string $name Name.
+	 * @return array|null The updated item, or null when it is not listed.
+	 */
+	public function reattribute( string $type, string $name ): ?array {
+		$state = self::state();
+		$found = null;
+		foreach ( (array) ( $state['items'] ?? array() ) as $index => $item ) {
+			if ( $item['type'] === $type && $item['name'] === $name ) {
+				$who = $this->attribution->attribute( $type, $name );
+				if ( $who['in_use'] ) {
+					// An installed plugin owns it: not a leftover.
+					unset( $state['items'][ $index ] );
+					$state['items'] = array_values( $state['items'] );
+					self::save( $state );
+					return null;
+				}
+				$state['items'][ $index ] = array(
+					'owner'      => $who['owner'],
+					'owner_name' => $who['owner_name'],
+					'confidence' => $who['confidence'],
+					'evidence'   => $who['evidence'],
+				) + $item;
+				$found                    = $state['items'][ $index ];
+				break;
+			}
+		}
+		if ( $found ) {
+			self::save( $state );
+		}
+
+		return $found;
+	}
+
+	/**
 	 * Drops items from the cached results (after they were trashed).
 	 *
 	 * @param array<int, array{type: string, name: string}> $items Items.

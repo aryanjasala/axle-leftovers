@@ -54,6 +54,27 @@ final class Messages {
 			'unsafe'             => __( 'The folder %s is a link or outside uploads, so it is left alone.', 'axle-leftovers' ),
 			'frozen'             => __( 'Axle Read-Only Mode has frozen this site. Trash, restore and purge are off until the freeze ends.', 'axle-leftovers' ),
 			'nothing_selected'   => __( 'Pick at least one item.', 'axle-leftovers' ),
+			'lookup_off'         => __( 'The online lookup is off. Turn it on in Settings first.', 'axle-leftovers' ),
+			/* translators: %s: item name. */
+			'lookup_owned'       => __( '%s already has an owner with better evidence than a guess, so it is not looked up.', 'axle-leftovers' ),
+			/* translators: 1: item name, 2: number of characters. */
+			'lookup_short'       => __( '%1$s is too short to look up: names under %2$s characters match too much code.', 'axle-leftovers' ),
+			/* translators: %s: seconds. */
+			'lookup_wait'        => __( 'The lookup service allows few requests. Try again in %s seconds.', 'axle-leftovers' ),
+			/* translators: %s: reason. */
+			'lookup_http'        => __( 'The lookup service did not answer as expected (%s).', 'axle-leftovers' ),
+			'lookup_limited'     => __( 'The lookup service says too many requests were sent. Try again in a minute.', 'axle-leftovers' ),
+			'lookup_bad'         => __( 'The lookup service sent an answer this plugin cannot read.', 'axle-leftovers' ),
+			'lookup_failed'      => __( 'The lookup service could not run the search.', 'axle-leftovers' ),
+			'lookup_pending'     => __( 'The search did not finish in time. Try again in a minute.', 'axle-leftovers' ),
+			'dataset_off'        => __( 'Downloading the full list is off. Turn it on in Settings first.', 'axle-leftovers' ),
+			/* translators: %s: reason. */
+			'dataset_http'       => __( 'Could not download the full list (%s).', 'axle-leftovers' ),
+			'dataset_large'      => __( 'The download is larger than the size limit, so it was discarded.', 'axle-leftovers' ),
+			'dataset_checksum'   => __( 'The download does not match its checksum, so it was discarded.', 'axle-leftovers' ),
+			'dataset_shape'      => __( 'The download is not a valid signature list, so it was discarded.', 'axle-leftovers' ),
+			'dataset_unpack'     => __( 'The download could not be unpacked, so it was discarded.', 'axle-leftovers' ),
+			'dataset_save'       => __( 'Could not save the list. Check that the uploads folder is writable.', 'axle-leftovers' ),
 			'nothing_to_restore' => __( 'Nothing in the trash matches.', 'axle-leftovers' ),
 		);
 

@@ -16,10 +16,10 @@ use Brain\Monkey\Filters;
 final class SettingsTest extends LeftoversTestCase {
 
 	public function test_defaults_and_sanitizing(): void {
-		$this->assertSame( array( 'retention_days' => 30, 'export_max_mb' => 200, 'keep_exports' => false, 'runtime_ledger' => true, 'track_meta_keys' => true ), Settings::all() );
+		$this->assertSame( array( 'retention_days' => 30, 'export_max_mb' => 200, 'keep_exports' => false, 'runtime_ledger' => true, 'track_meta_keys' => true, 'online_lookup' => false, 'remote_dataset' => false ), Settings::all() );
 
 		Settings::save( array( 'retention_days' => '0', 'export_max_mb' => '-5', 'keep_exports' => '1' ) );
-		$this->assertSame( array( 'retention_days' => 1, 'export_max_mb' => 0, 'keep_exports' => true, 'runtime_ledger' => false, 'track_meta_keys' => false ), Settings::all() );
+		$this->assertSame( array( 'retention_days' => 1, 'export_max_mb' => 0, 'keep_exports' => true, 'runtime_ledger' => false, 'track_meta_keys' => false, 'online_lookup' => false, 'remote_dataset' => false ), Settings::all() );
 	}
 
 	public function test_capability_filter_and_fallback(): void {

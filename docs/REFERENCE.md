@@ -28,7 +28,7 @@ An item that any installed plugin (active or not), must-use plugin or theme may 
 
 The reference check searches the PHP of active plugins, the active theme and its parent, must-use plugins and drop-ins for the name as a quoted literal (and `}name` for tables). A hit blocks the trash and names the file.
 
-### The dataset
+### The bundled list
 
 `data/signatures.json` holds the names and prefixes of about 500 of the most installed WordPress.org plugins, scanned with the same `Signature` class the plugin runs on installed plugins. Rebuild it at release time:
 
@@ -37,6 +37,16 @@ php bin/build-signatures.php --count=500 --cache=/tmp/axle-leftovers-zips
 ```
 
 It downloads each plugin's latest zip once into the cache folder and keeps the file under 1 MB (dropping uninstall names, then meta keys, then the least installed plugins when it has to). Nothing is fetched on a site.
+
+### The full list (opt-in)
+
+About 10,000 plugins, built on GitHub and downloaded on request. The `Signatures` workflow (`.github/workflows/signatures.yml`, monthly and on demand) runs `bin/build-signatures.php --publish-dir=...` and commits the result to the orphan branch `signatures`: `signatures.json.gz`, `signatures.json.gz.sha256` and `state.json` (slug to version). A run reads the last `state.json` and signatures and downloads only plugins whose version changed or that are new. Each zip is scanned and deleted at once. A plugin that fails to download keeps its old data and is retried next run. `--max-minutes` stops starting downloads after a while and the next run carries on.
+
+On a site, Settings > Signature list (or `wp axle-leftovers dataset download`) fetches the file from `raw.githubusercontent.com`, rejects it unless it is under the size limit, matches the checksum file, unpacks, and has the shape `{ version: 1, built, plugins: { slug: { name, t, o, c, m, r, u, p, n } } }`, then stores it in `uploads/axle-leftovers/dataset/`. It is merged with the bundled list: the downloaded entry wins for a slug in both, the bundled list fills the rest. Remove it to go back to the bundled list. Both the setting and the download are off by default.
+
+### The online lookup (opt-in)
+
+For an Unknown item (or a Guess), Look it up sends one private search with the item's name to Veloria (veloria.dev, formerly wpdirectory.net), which searches the PHP of every plugin on WordPress.org. Exactly one matching plugin gives a Likely owner; two up to 20 give a Guess for the most installed plugin, with all candidates shown; none, or more than 20, gives no owner. Every result is cached for 30 days, lookups are 30 seconds apart (Veloria allows 10 requests a minute), and only names the scan listed can be looked up. It runs from the screen, WP-CLI or the ability, never on a page load.
 
 ## Hooks
 
@@ -51,7 +61,19 @@ It downloads each plugin's latest zip once into the cache folder and keeps the f
 | `axle_leftovers_owner` | `array $result, string $type, string $name` | owner, owner_name, confidence, evidence, in_use, in_use_by |
 | `axle_leftovers_confidence_levels` | `array $levels` | certain, likely, guess, unknown labels |
 | `axle_leftovers_signature` | `array $signature, string $slug, string $version` | names the plugin's code uses |
-| `axle_leftovers_dataset` | `array $plugins` | the bundled dataset |
+| `axle_leftovers_dataset` | `array $plugins` | the bundled list merged with the downloaded full list |
+| `axle_leftovers_lookup_enabled` | `bool $enabled` | true; the setting must be on too, so a filter can only turn the lookup off |
+| `axle_leftovers_lookup_endpoint` | `string $endpoint` | `https://veloria.dev/api/v1/search/` (HTTPS only) |
+| `axle_leftovers_lookup_term` | `string $term, string $type, string $name` | the escaped item name; the only thing a lookup sends |
+| `axle_leftovers_lookup_min_interval` | `int $seconds` | 30 (1 to 3600) |
+| `axle_leftovers_lookup_cache_days` | `int $days` | 30 (1 to 365) |
+| `axle_leftovers_lookup_max_candidates` | `int $max` | 5 (1 to 20) |
+| `axle_leftovers_lookup_max_matches` | `int $max` | 20 (1 to 200); a name in more plugins has no owner |
+| `axle_leftovers_lookup_polls` | `int $polls` | 4 (1 to 10), each counts toward the service limit |
+| `axle_leftovers_lookup_poll_interval` | `int $seconds` | 2 (0 to 10) |
+| `axle_leftovers_dataset_download_enabled` | `bool $enabled` | true; the setting must be on too |
+| `axle_leftovers_dataset_url` | `string $url` | `https://raw.githubusercontent.com/aryanjasala/axle-leftovers/signatures/signatures.json.gz` (HTTPS only; the checksum is this plus `.sha256`) |
+| `axle_leftovers_dataset_max_bytes` | `int $bytes` | 15 MB (100 KB to 100 MB) |
 | `axle_leftovers_scan_batch_size` | `int $rows` | 20000 (100 to 1000000) |
 | `axle_leftovers_meta_batch_size` | `int $rows` | 1000 (10 to 10000) |
 | `axle_leftovers_export_max_bytes` | `int $bytes` | 200 MB, from Settings |
@@ -90,6 +112,9 @@ add_filter( 'axle_leftovers_can_trash', function ( $allowed, $item ) {
 | `axle_leftovers_restored` | `array[] $rows, string $batch` |
 | `axle_leftovers_restore_failed` | `array $row, WP_Error $error` |
 | `axle_leftovers_purged` | `array[] $rows` |
+| `axle_leftovers_lookup_done` | `array $result, string $type, string $name` (also when nothing matched) |
+| `axle_leftovers_dataset_downloaded` | `array $meta` (built, count, fetched_gmt, size, sha256) |
+| `axle_leftovers_dataset_removed` | |
 
 Example: log every trash in your own audit log.
 
@@ -129,6 +154,8 @@ $who = \AryanX\Axle\Leftovers\owner_of( 'option', 'acme_settings' );
 | `axle-leftovers/restore-items` | idempotent, not destructive | `batch` or `items` (trash IDs) |
 | `axle-leftovers/purge-trash` | destructive, idempotent | `older_than`, `batch` |
 | `axle-leftovers/rescan` | not readonly | `rescan_signatures` |
+| `axle-leftovers/lookup-item` | not readonly, idempotent | `type`, `name`, `refresh` |
+| `axle-leftovers/download-dataset` | not readonly, idempotent | |
 
 Permission: the `axle_leftovers_capability` capability.
 
@@ -149,6 +176,8 @@ Permission: the `axle_leftovers_capability` capability.
 | `wp axle-leftovers trash list [--format=]` | The trash |
 | `wp axle-leftovers trash purge [--older-than=<days>] [--yes]` | Delete for good |
 | `wp axle-leftovers ledger list [--format=]` / `ledger show <slug>` | Plugins seen |
+| `wp axle-leftovers lookup <type> <name> [--refresh] [--format=]` | Online lookup of an Unknown item (needs the setting) |
+| `wp axle-leftovers dataset download\|status\|remove` | The full signature list (download needs the setting) |
 
 ## Site Health
 
@@ -159,8 +188,8 @@ Permission: the `axle_leftovers_capability` capability.
 - Table `{prefix}axle_leftovers_ledger`: plugins seen, their version, removal, sources and code signature.
 - Table `{prefix}axle_leftovers_seen`: item type, name, owner, first seen, evidence. One row per distinct name.
 - Table `{prefix}axle_leftovers_trash`: one row per trashed item: batch, type, name, owner, confidence, payload, locations, size, export, user, dates, status.
-- Options `axle_leftovers_settings`, `axle_leftovers_scan` (cached results, not autoloaded), `axle_leftovers_db_version`.
-- Folder `uploads/axle-leftovers/` with `exports/` and `trash/`, with deny rules.
+- Options `axle_leftovers_settings`, `axle_leftovers_scan` (cached results, not autoloaded), `axle_leftovers_lookups` (cached online lookups, not autoloaded), `axle_leftovers_dataset_meta` (date and count of the downloaded list, not autoloaded), `axle_leftovers_db_version`.
+- Folder `uploads/axle-leftovers/` with `exports/`, `trash/` and `dataset/`, with deny rules.
 - Cron `axle_leftovers_daily` (purge and rescan) and `axle_leftovers_scan_step` (background scan steps).
 
 The privacy exporter lists the items a user trashed; the eraser purges trashed batches that hold the user's meta and removes the user from trash records. Uninstall purges the trash (or restores it, with the filter), then removes the tables, options, cron events, transients and folder.

@@ -50,6 +50,20 @@ class Attribution {
 	private Dataset $dataset;
 
 	/**
+	 * Cached online lookups.
+	 *
+	 * @var Lookup
+	 */
+	private Lookup $lookup;
+
+	/**
+	 * Names of plugins found by online lookups, by slug.
+	 *
+	 * @var array<string, string>
+	 */
+	private array $lookup_names = array();
+
+	/**
 	 * Lookup tables, built once.
 	 *
 	 * @var array|null
@@ -66,12 +80,14 @@ class Attribution {
 	/**
 	 * Sets up attribution.
 	 *
-	 * @param Ledger  $ledger  Ledger.
-	 * @param Dataset $dataset Dataset.
+	 * @param Ledger      $ledger  Ledger.
+	 * @param Dataset     $dataset Dataset.
+	 * @param Lookup|null $lookup  Cached online lookups. Default: the stored ones.
 	 */
-	public function __construct( Ledger $ledger, Dataset $dataset ) {
+	public function __construct( Ledger $ledger, Dataset $dataset, ?Lookup $lookup = null ) {
 		$this->ledger  = $ledger;
 		$this->dataset = $dataset;
+		$this->lookup  = $lookup ?? new Lookup();
 	}
 
 	/**
@@ -199,6 +215,23 @@ class Attribution {
 			}
 		}
 
+		// An online lookup the site owner ran: the plugins whose code names this item.
+		$found = $this->lookup->cached( $type, $name );
+		if ( $found && ! empty( $found['candidates'] ) && isset( self::RANK[ (string) ( $found['confidence'] ?? '' ) ] ) ) {
+			$names = array();
+			foreach ( (array) $found['candidates'] as $plugin ) {
+				$names[]                               = (string) $plugin['name'];
+				$this->lookup_names[ $plugin['slug'] ] = (string) $plugin['name'];
+			}
+			$candidates[] = array(
+				'owner'      => (string) $found['candidates'][0]['slug'],
+				'confidence' => (string) $found['confidence'],
+				'weight'     => 1.2,
+				'code'       => 'lookup',
+				'detail'     => implode( ', ', $names ),
+			);
+		}
+
 		$in_use_by = '';
 		foreach ( $candidates as $candidate ) {
 			if ( isset( $installed[ $candidate['owner'] ] ) ) {
@@ -305,6 +338,9 @@ class Attribution {
 			return (string) $index['ledger'][ $owner ]['name'];
 		}
 		$name = $this->dataset->name( $owner );
+		if ( '' === $name && isset( $this->lookup_names[ $owner ] ) ) {
+			$name = $this->lookup_names[ $owner ];
+		}
 
 		return '' !== $name ? $name : $owner;
 	}
@@ -475,6 +511,13 @@ class Attribution {
 			case 'dataset-prefix':
 				/* translators: 1: prefix, 2: plugin name. */
 				return sprintf( __( 'Dataset match: starts with %1$s, a prefix in %2$s on WordPress.org', 'axle-leftovers' ), $detail, $name );
+			case 'lookup':
+				if ( false === strpos( $detail, ', ' ) ) {
+					/* translators: %s: plugin name. */
+					return sprintf( __( 'Online lookup: only %s on WordPress.org names it in its code', 'axle-leftovers' ), $detail );
+				}
+				/* translators: %s: plugin names, most installed first. */
+				return sprintf( __( 'Online lookup: named in the code of %s on WordPress.org', 'axle-leftovers' ), $detail );
 			default:
 				/* translators: 1: prefix, 2: plugin name. */
 				return sprintf( __( 'Prefix guess: starts with %1$s, like %2$s', 'axle-leftovers' ), $detail, $name );

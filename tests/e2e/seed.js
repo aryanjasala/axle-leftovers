@@ -26,6 +26,43 @@ function installHelpers() {
 	wpEval( `wp_mkdir_p( WPMU_PLUGIN_DIR ); copy( ${ FIXTURES } . "/axle-leftovers-e2e.php", WPMU_PLUGIN_DIR . "/axle-leftovers-e2e.php" );` );
 }
 
+/** Copies the must-use plugin that answers the online lookup and the list download, so no test calls a real service. */
+function installMockHttp() {
+	wpEval( `wp_mkdir_p( WPMU_PLUGIN_DIR ); copy( ${ FIXTURES } . "/axle-leftovers-mock-http.php", WPMU_PLUGIN_DIR . "/axle-leftovers-mock-http.php" );` );
+}
+
+/** Removes the HTTP mock and its log. */
+function removeMockHttp() {
+	wpEval( '@unlink( WPMU_PLUGIN_DIR . "/axle-leftovers-mock-http.php" );' );
+	for ( const option of [ 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum' ] ) {
+		succeeds( 'option', 'delete', option );
+	}
+}
+
+/** Turns on the online lookup and the list download (both are off by default). */
+function enableOnline() {
+	wp( 'option', 'update', 'axle_leftovers_settings', JSON.stringify( { online_lookup: true, remote_dataset: true } ), '--format=json' );
+}
+
+/** Three unknown options for the lookup specs, with the mock and the settings on. */
+function makeLookupItems() {
+	installMockHttp();
+	enableOnline();
+	for ( const name of [ 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ] ) {
+		wp( 'option', 'update', name, 'value', '--autoload=no' );
+	}
+	wp( 'axle-leftovers', 'scan' );
+}
+
+/** The HTTP requests the mock saw. */
+function httpLog() {
+	try {
+		return JSON.parse( wp( 'option', 'get', 'alo_e2e_http_log', '--format=json' ) );
+	} catch ( error ) {
+		return []; // The option does not exist: nothing was requested.
+	}
+}
+
 /** Copies the consumer must-use plugin that still reads lm_settings. */
 function installConsumer() {
 	wpEval( `wp_mkdir_p( WPMU_PLUGIN_DIR ); copy( ${ FIXTURES } . "/lm-consumer.php", WPMU_PLUGIN_DIR . "/lm-consumer.php" );` );
@@ -118,6 +155,11 @@ function resetAll() {
 	}
 	wp( 'db', 'query', "DELETE FROM wp_options WHERE option_name LIKE '\\_transient\\_axle\\_leftovers\\_%' OR option_name LIKE '\\_transient\\_timeout\\_axle\\_leftovers\\_%'" );
 	succeeds( 'cron', 'event', 'unschedule', 'axle_leftovers_scan_step' );
+
+	removeMockHttp();
+	for ( const option of [ 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ] ) {
+		succeeds( 'option', 'delete', option );
+	}
 }
 
 /** Leftovers of Redirection, deleted before Leftovers was installed: known only from the dataset. */
@@ -149,6 +191,11 @@ module.exports = {
 	installHelpers,
 	installConsumer,
 	removeConsumer,
+	installMockHttp,
+	removeMockHttp,
+	enableOnline,
+	makeLookupItems,
+	httpLog,
 	installMaker,
 	uninstallMaker,
 	makeLeftovers,

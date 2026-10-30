@@ -7,7 +7,10 @@
 
 namespace AryanX\Axle\Leftovers\Cli;
 
+use AryanX\Axle\Leftovers\DatasetUpdater;
+use AryanX\Axle\Leftovers\Dataset;
 use AryanX\Axle\Leftovers\Ledger;
+use AryanX\Axle\Leftovers\Lookup;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Signature;
 use AryanX\Axle\Leftovers\Trash;
@@ -425,6 +428,103 @@ final class Command {
 			return;
 		}
 		WP_CLI::success( sprintf( 'Purged %d items.', count( $result ) ) );
+	}
+
+	/**
+	 * Looks an Unknown item up online: which WordPress.org plugins name it in their code.
+	 *
+	 * Needs the online lookup turned on in Settings. Sends only the item name to
+	 * veloria.dev. Results are cached and requests are spaced out.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <type>
+	 * : Item type.
+	 *
+	 * <name>
+	 * : Item name, tables with the prefix. It has to be a listed leftover with no owner.
+	 *
+	 * [--refresh]
+	 * : Ask again even when a result is cached.
+	 *
+	 * [--format=<format>]
+	 * : table, json or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function lookup( $args, $assoc_args ): void {
+		$this->ensure_scanned();
+		$result = ( new Lookup() )->for_item( $this->scanner, (string) $args[0], (string) $args[1], ! empty( $assoc_args['refresh'] ) );
+		if ( is_wp_error( $result ) ) {
+			WP_CLI::error( $result->get_error_message() );
+			return;
+		}
+		$result = $result['result'];
+		if ( empty( $result['candidates'] ) ) {
+			WP_CLI::warning( sprintf( '%d plugins name it. No owner was picked.', (int) $result['total'] ) );
+			return;
+		}
+		$rows = array();
+		foreach ( $result['candidates'] as $plugin ) {
+			$rows[] = array(
+				'slug'       => $plugin['slug'],
+				'name'       => $plugin['name'],
+				'installs'   => $plugin['installs'],
+				'url'        => $plugin['url'],
+				'confidence' => $result['confidence'],
+			);
+		}
+		Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'slug', 'name', 'installs', 'url', 'confidence' ) );
+	}
+
+	/**
+	 * Manages the full signature list (about 10,000 plugins).
+	 *
+	 * `download` needs the download turned on in Settings. It fetches the list
+	 * from raw.githubusercontent.com, checks size, checksum and shape, and merges
+	 * it with the bundled list. Nothing from the site is sent.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : download, status or remove.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp axle-leftovers dataset status
+	 *     wp axle-leftovers dataset download
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function dataset( $args, $assoc_args ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI passes both.
+		$updater = new DatasetUpdater();
+		switch ( (string) $args[0] ) {
+			case 'download':
+				$meta = $updater->download();
+				if ( is_wp_error( $meta ) ) {
+					WP_CLI::error( $meta->get_error_message() );
+					return;
+				}
+				WP_CLI::success( sprintf( 'Downloaded the full list: %d plugins, built %s.', $meta['count'], $meta['built'] ) );
+				break;
+			case 'remove':
+				$updater->remove();
+				WP_CLI::success( 'Removed the full list. The bundled list is used.' );
+				break;
+			case 'status':
+				$info = ( new Dataset() )->info();
+				WP_CLI::log( sprintf( 'Bundled list: %d plugins, built %s.', $info['bundled_count'], $info['bundled_built'] ) );
+				WP_CLI::log( $info['downloaded'] ? sprintf( 'Full list: %d plugins, built %s, downloaded %s UTC.', $info['downloaded']['count'], $info['downloaded']['built'], $info['downloaded']['fetched_gmt'] ) : 'Full list: not downloaded.' );
+				WP_CLI::log( sprintf( 'In use: %d plugins.', $info['count'] ) );
+				break;
+			default:
+				WP_CLI::error( 'Use download, status or remove.' );
+		}
 	}
 
 	/**
