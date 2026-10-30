@@ -27,7 +27,7 @@ Part of Axle by AryanX, a family of plugins for running WordPress sites safely.
 WordPress does not record which plugin created a table, option or cron event. Leftovers combines four sources and shows each one:
 
 * **Certain**: Leftovers saw the plugin create it. Around every plugin activation it compares what exists before and after, and while it runs it records who creates new tables, options, cron events, roles, capabilities and meta keys.
-* **Likely**: the name is in the plugin's code. Leftovers reads each plugin's PHP once and keeps the names it uses, even after the plugin is deleted, also over FTP. A bundled list covers about 500 of the most installed plugins on WordPress.org, for plugins deleted before Leftovers was installed.
+* **Likely**: the name is in the plugin's code. Leftovers reads each plugin's PHP once and keeps the names it uses, even after the plugin is deleted, also over FTP. A bundled list covers about 500 of the most installed plugins on WordPress.org, for plugins deleted before Leftovers was installed. If you allow it, you can download a full list of about 10,000 plugins, rebuilt every month.
 * **Guess**: the name starts like a plugin's slug. Never enough on its own: you have to type the name to trash it.
 * **Unknown**: nothing points anywhere. You have to type the name too.
 
@@ -84,7 +84,15 @@ Its own tables, settings and folder are removed. Items still in its trash are pu
 
 = Does it send anything anywhere? =
 
-No. The list of popular plugins is built when a release is made and ships inside the plugin.
+Not unless you turn on one of two opt-in features in Settings, both off by default. The online lookup sends the name of one Unknown item to veloria.dev when you click Look it up. The full list download fetches a file from raw.githubusercontent.com and sends nothing from your site. See External services below.
+
+= What does Look it up do? =
+
+For an Unknown item it searches the code of every plugin on WordPress.org for the name, and lists the plugins that use it with their installs and a link. One plugin means Likely. A few plugins mean Guess, with the most installed first. A name found in more than 20 plugins is shared, so no owner is picked. Results are cached for 30 days. Items found this way still need the name typed to move to the trash when the result is a Guess.
+
+= What is the full list? =
+
+The top 10,000 plugins on WordPress.org by installs, scanned with the same scanner as installed plugins. A GitHub workflow rebuilds it every month and only re-reads plugins whose version changed. Download it from Settings, or with `wp axle-leftovers dataset download`. It is stored in uploads, checked against a published checksum, and merged with the bundled list, which stays the fallback.
 
 = Is the export folder safe on nginx? =
 
@@ -100,7 +108,37 @@ It has `.htaccess` and `web.config` deny rules, which nginx ignores. The file na
 
 == External services ==
 
-This plugin makes no external calls. The bundled list of plugin signatures in `data/signatures.json` is built at release time from public WordPress.org plugin zips by `bin/build-signatures.php`.
+This plugin makes no external calls until you turn one of these on in Tools > Leftovers > Settings. Both are off by default. Neither runs on a page load or in the background. Both can be turned off in code with a filter.
+
+= Online lookup: Veloria (veloria.dev) =
+
+What it is: Veloria, a code search of every plugin on WordPress.org (veloria.dev, formerly wpdirectory.net).
+
+What is sent: one search with the name of the Unknown item you chose (a table without its prefix, an option name, a cron hook and so on), as an escaped text pattern, marked as a private search. Your server's IP address and user agent go with it, as with any web request. Nothing else from your site is sent.
+
+When: only when you click Look it up, run `wp axle-leftovers lookup`, or call the `axle-leftovers/lookup-item` ability. At most one lookup every 30 seconds, and every result is cached for 30 days. The service allows 10 requests a minute.
+
+What the service keeps: the search and its results, and server logs with IP address, path and time for a limited period.
+
+Terms: https://veloria.dev/terms
+Privacy: https://veloria.dev/privacy
+
+Filters: `axle_leftovers_lookup_endpoint` changes the address, `axle_leftovers_lookup_enabled` returns false to turn the lookup off.
+
+= Full signature list: GitHub (raw.githubusercontent.com) =
+
+What it is: a file of the names and prefixes used by the top 10,000 plugins on WordPress.org, built every month by a GitHub Actions workflow in this plugin's repository (github.com/aryanjasala/axle-leftovers) and published to its `signatures` branch.
+
+What is sent: nothing from your site. Your server asks for `signatures.json.gz` and `signatures.json.gz.sha256` from raw.githubusercontent.com, so GitHub sees your server's IP address and user agent.
+
+When: only when you click Download the full list, run `wp axle-leftovers dataset download`, or call the `axle-leftovers/download-dataset` ability. The file has a size limit, has to match its published checksum, and has to have the right shape, or it is discarded. It is stored in `wp-content/uploads/axle-leftovers/dataset` and merged with the bundled list. Delete it any time with Delete downloaded list in Settings, `wp axle-leftovers dataset delete` or the `axle-leftovers/delete-dataset` ability. A list you downloaded stays in use if you turn the setting off, until you delete it.
+
+Terms: https://docs.github.com/en/site-policy/github-terms/github-terms-of-service
+Privacy: https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement
+
+Filters: `axle_leftovers_dataset_url` changes the address (the checksum file must sit next to it), `axle_leftovers_dataset_download_enabled` returns false to turn the download off.
+
+The bundled list in `data/signatures.json` is built at release time from public WordPress.org plugin zips by `bin/build-signatures.php`, and needs no call.
 
 == Changelog ==
 

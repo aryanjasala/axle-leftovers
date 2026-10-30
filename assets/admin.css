@@ -192,3 +192,16 @@
 		display: none;
 	}
 }
+
+.alo-candidates {
+	margin: 4px 0 0 1.2em;
+	list-style: disc;
+}
+
+.alo-candidates a {
+	text-decoration: underline;
+}
+
+.alo-lookup-note {
+	margin: 4px 0 0;
+}

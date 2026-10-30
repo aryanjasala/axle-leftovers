@@ -43,6 +43,7 @@ Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none,
 - **Plugins screen notice** after a delete: "Leftover Maker left 1 table, 5 options and 2 cron events. Review."
 - **Survives FTP deletes**: code signatures stay in the ledger, and plugins removed outside WordPress are recorded
 - **WP-CLI**, REST, abilities for agents, Site Health, privacy export and erase, multisite, Axle Read-Only Mode aware
+- **Attribute more Unknown items, opt-in**: Look it up searches the code of every WordPress.org plugin for an item's name (through veloria.dev), and Download the full list adds about 10,000 plugins from GitHub. Both are off by default and documented as external services
 
 ## Install
 
@@ -91,7 +92,7 @@ Or open Tools > Leftovers.
 
 | Doc | What it covers |
 | --- | --- |
-| [Reference](docs/REFERENCE.md) | Item types, attribution and evidence, the dataset, hooks, abilities, REST, WP-CLI, data and privacy |
+| [Reference](docs/REFERENCE.md) | Item types, attribution and evidence, the lists and the online lookup, hooks, abilities, REST, WP-CLI, data and privacy |
 | [Development](docs/DEVELOPMENT.md) | Local setup, commands and tests |
 | [Contributing](docs/CONTRIBUTING.md) | Pull requests, required checks and PR titles |
 | [Releasing](docs/RELEASING.md) | How merged pull requests become releases |
@@ -107,7 +108,9 @@ src/
 ├── Recorder.php          who creates what: activation, runtime, uninstall
 ├── Ledger.php            plugins seen and first-seen items
 ├── Signature.php         reads a plugin's PHP for the names it uses
-├── Dataset.php           the bundled signatures of popular plugins
+├── Dataset.php           the bundled list merged with the downloaded one
+├── DatasetUpdater.php    opt-in download of the full list
+├── Lookup.php            opt-in online lookup of Unknown items
 ├── Attribution.php       owner, confidence and evidence
 ├── References.php        is active code still using a name?
 ├── Scanner.php           the batched background scan
@@ -123,7 +126,7 @@ src/
 ├── Admin/                Tools > Leftovers and the Plugins screen
 ├── Health/SiteHealth.php the Site Health test
 └── Cli/                  wp axle-leftovers
-bin/build-signatures.php  builds data/signatures.json at release time
+bin/build-signatures.php  builds the bundled list, and the full list on GitHub
 data/signatures.json      the bundled dataset
 assets/                   admin.css, admin.js
 tests/

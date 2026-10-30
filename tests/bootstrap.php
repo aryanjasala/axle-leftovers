@@ -9,5 +9,6 @@
 
 require dirname( __DIR__ ) . '/vendor/autoload.php';
 require __DIR__ . '/Stubs/wordpress.php';
+require __DIR__ . '/Stubs/wpcli.php';
 
 defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );

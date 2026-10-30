@@ -23,12 +23,14 @@ final class Settings {
 		'keep_exports'    => false,
 		'runtime_ledger'  => true,
 		'track_meta_keys' => true,
+		'online_lookup'   => false,
+		'remote_dataset'  => false,
 	);
 
 	/**
 	 * The stored settings merged over the defaults.
 	 *
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool}
 	 */
 	public static function all(): array {
 		$stored = get_option( self::OPTION, array() );
@@ -41,7 +43,7 @@ final class Settings {
 	 * Cleans submitted or stored settings.
 	 *
 	 * @param array $input Raw values.
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool}
 	 */
 	public static function sanitize( array $input ): array {
 		return array(
@@ -50,6 +52,8 @@ final class Settings {
 			'keep_exports'    => ! empty( $input['keep_exports'] ),
 			'runtime_ledger'  => ! empty( $input['runtime_ledger'] ),
 			'track_meta_keys' => ! empty( $input['track_meta_keys'] ),
+			'online_lookup'   => ! empty( $input['online_lookup'] ),
+			'remote_dataset'  => ! empty( $input['remote_dataset'] ),
 		);
 	}
 
@@ -149,6 +153,36 @@ final class Settings {
 		 * @param string $meta_type post, user, term or comment.
 		 */
 		return (bool) apply_filters( 'axle_leftovers_track_meta_keys', $all['runtime_ledger'] && $all['track_meta_keys'], $meta_type );
+	}
+
+	/**
+	 * Whether the online lookup of Unknown items is on.
+	 *
+	 * @return bool
+	 */
+	public static function online_lookup(): bool {
+		/**
+		 * Filters whether the online lookup of Unknown items may run. The setting
+		 * has to be on as well: a filter can only turn the lookup off.
+		 *
+		 * @param bool $enabled True when the setting is on.
+		 */
+		return self::all()['online_lookup'] && (bool) apply_filters( 'axle_leftovers_lookup_enabled', true );
+	}
+
+	/**
+	 * Whether downloading the full signature list is on.
+	 *
+	 * @return bool
+	 */
+	public static function remote_dataset(): bool {
+		/**
+		 * Filters whether the full signature list may be downloaded. The setting
+		 * has to be on as well: a filter can only turn the download off.
+		 *
+		 * @param bool $enabled True when the setting is on.
+		 */
+		return self::all()['remote_dataset'] && (bool) apply_filters( 'axle_leftovers_dataset_download_enabled', true );
 	}
 
 	/**

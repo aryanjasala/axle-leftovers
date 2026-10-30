@@ -68,6 +68,34 @@
       "steps": [{ "waitFor": ".alo-settings" }]
     },
     {
+      "name": "Unknown with Look it up buttons (online lookup on)",
+      "setup": [{ "js": "seed.js", "call": "makeLookupItems" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=unknown",
+      "steps": [{ "waitFor": ".alo-lookup" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Unknown after a lookup that found nothing",
+      "setup": [{ "js": "seed.js", "call": "makeLookupItems" }, { "wp": ["axle-leftovers", "lookup", "option", "lmx_nobody_setting"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=unknown",
+      "steps": [{ "waitFor": ".alo-lookup-note" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "By plugin with an owner found by a lookup, candidates listed",
+      "setup": [{ "js": "seed.js", "call": "makeLookupItems" }, { "wp": ["axle-leftovers", "lookup", "option", "lmx_shared_setting"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "click": ".alo-card[data-owner=\"big-widgets\"] .alo-review summary" }, { "waitFor": ".alo-candidates" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Settings with both opt-ins on and the full list downloaded",
+      "setup": [{ "js": "seed.js", "call": "makeLookupItems" }, { "wp": ["axle-leftovers", "dataset", "download"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=settings",
+      "steps": [{ "waitFor": ".alo-dataset-full" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
       "name": "Plugins screen: the notice after a delete",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["eval", "set_transient( 'axle_leftovers_deleted_1', array( 'leftover-maker' ), 3600 );"] }],
       "url": "/wp-admin/plugins.php",

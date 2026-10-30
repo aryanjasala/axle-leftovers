@@ -7,7 +7,11 @@
 
 namespace AryanX\Axle\Leftovers\Admin;
 
+use AryanX\Axle\Leftovers\Dataset;
+use AryanX\Axle\Leftovers\DatasetUpdater;
 use AryanX\Axle\Leftovers\Ledger;
+use AryanX\Axle\Leftovers\Lookup;
+use AryanX\Axle\Leftovers\Messages;
 use AryanX\Axle\Leftovers\Recorder;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Service;
@@ -58,6 +62,20 @@ final class Page implements Service {
 	private Recorder $recorder;
 
 	/**
+	 * The online lookup.
+	 *
+	 * @var Lookup
+	 */
+	private Lookup $lookup;
+
+	/**
+	 * The full signature list.
+	 *
+	 * @var DatasetUpdater
+	 */
+	private DatasetUpdater $updater;
+
+	/**
 	 * Sets up the screen.
 	 *
 	 * @param Scanner  $scanner  Scanner.
@@ -70,6 +88,8 @@ final class Page implements Service {
 		$this->trash    = $trash;
 		$this->ledger   = $ledger;
 		$this->recorder = $recorder;
+		$this->lookup   = new Lookup();
+		$this->updater  = new DatasetUpdater();
 	}
 
 	/**
@@ -314,6 +334,12 @@ final class Page implements Service {
 			echo '<p class="alo-empty">' . esc_html__( 'No unknown items.', 'axle-leftovers' ) . '</p>';
 			return;
 		}
+		if ( Settings::online_lookup() ) {
+			echo '<p class="description">' . esc_html__( 'Look it up searches the code of every plugin on WordPress.org for the name, through veloria.dev. Only the item name is sent, and only when you click.', 'axle-leftovers' ) . '</p>';
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="alo-lookup-form" class="alo-lookup-form">';
+			$this->hidden( 'lookup', $network );
+			echo '</form>';
+		}
 		$this->items_form( $items, $network, 'alo-unknown' );
 	}
 
@@ -371,6 +397,7 @@ final class Page implements Service {
 				}
 				echo '</ul>';
 			}
+			$this->lookup_cell( $item );
 			echo '</td><td>';
 			if ( $blocked ) {
 				/* translators: %s: file paths. */
@@ -384,6 +411,69 @@ final class Page implements Service {
 		echo '<div class="alo-confirm-names" hidden></div>';
 		echo '<p><button type="submit" class="button button-primary alo-trash-button">' . esc_html__( 'Move selected to trash', 'axle-leftovers' ) . '</button></p>';
 		echo '</form>';
+	}
+
+	/**
+	 * What the online lookup adds to an item's evidence cell: the plugins it
+	 * found, a note when it found nothing, or the Look it up button.
+	 *
+	 * @param array $item Item.
+	 */
+	private function lookup_cell( array $item ): void {
+		$found = $this->lookup->cached( $item['type'], $item['name'] );
+		if ( $found && ! empty( $found['candidates'] ) ) {
+			echo '<ul class="alo-candidates">';
+			foreach ( $found['candidates'] as $plugin ) {
+				printf(
+					/* translators: 1: plugin name linked to WordPress.org, 2: number of active installs. */
+					'<li>' . esc_html__( '%1$s, %2$s active installs', 'axle-leftovers' ) . '</li>',
+					'<a href="' . esc_url( $plugin['url'] ) . '" target="_blank" rel="noopener noreferrer">' . esc_html( $plugin['name'] ) . '</a>',
+					esc_html( number_format_i18n( (int) $plugin['installs'] ) )
+				);
+			}
+			echo '</ul>';
+			return;
+		}
+		if ( 'unknown' !== $item['confidence'] || ! Settings::online_lookup() ) {
+			return;
+		}
+		if ( $found ) {
+			echo '<p class="alo-lookup-note">' . esc_html( $this->lookup_summary( $found, $item['name'] ) ) . '</p>';
+			return;
+		}
+		printf(
+			'<p><button type="submit" form="alo-lookup-form" name="item" value="%1$s" class="button button-small alo-lookup" aria-label="%2$s">%3$s</button></p>',
+			esc_attr( $item['id'] ),
+			/* translators: %s: item name. */
+			esc_attr( sprintf( __( 'Look up %s on WordPress.org', 'axle-leftovers' ), $item['name'] ) ),
+			esc_html__( 'Look it up', 'axle-leftovers' )
+		);
+	}
+
+	/**
+	 * One sentence about a lookup result.
+	 *
+	 * @param array  $result Lookup result.
+	 * @param string $name   Item name.
+	 * @return string
+	 */
+	private function lookup_summary( array $result, string $name ): string {
+		$total = (int) $result['total'];
+		if ( 0 === $total ) {
+			/* translators: %s: item name. */
+			return sprintf( __( 'Looked up %s: no plugin on WordPress.org names it in its code.', 'axle-leftovers' ), $name );
+		}
+		if ( empty( $result['candidates'] ) ) {
+			/* translators: 1: item name, 2: number of plugins. */
+			return sprintf( __( 'Looked up %1$s: %2$s plugins name it, too many to pick an owner.', 'axle-leftovers' ), $name, number_format_i18n( $total ) );
+		}
+		$first = $result['candidates'][0];
+		if ( 1 === $total ) {
+			/* translators: 1: item name, 2: plugin name. */
+			return sprintf( __( 'Looked up %1$s: only %2$s names it in its code (Likely).', 'axle-leftovers' ), $name, $first['name'] );
+		}
+		/* translators: 1: item name, 2: number of plugins, 3: plugin name. */
+		return sprintf( __( 'Looked up %1$s: %2$s plugins name it. The most installed is %3$s (Guess).', 'axle-leftovers' ), $name, number_format_i18n( $total ), $first['name'] );
 	}
 
 	/**
@@ -517,6 +607,8 @@ final class Page implements Service {
 			'keep_exports'    => array( __( 'Exports', 'axle-leftovers' ), __( 'Keep export files when the trash is purged', 'axle-leftovers' ) ),
 			'runtime_ledger'  => array( __( 'Runtime ledger', 'axle-leftovers' ), __( 'Record which plugin creates new tables, options, cron events, roles and capabilities', 'axle-leftovers' ) ),
 			'track_meta_keys' => array( __( 'Meta keys', 'axle-leftovers' ), __( 'Also record new post, user, term and comment meta keys', 'axle-leftovers' ) ),
+			'online_lookup'   => array( __( 'Online lookup', 'axle-leftovers' ), __( 'Show a Look it up button for Unknown items. It sends the item name to veloria.dev, which searches the code of every WordPress.org plugin', 'axle-leftovers' ) ),
+			'remote_dataset'  => array( __( 'Full list', 'axle-leftovers' ), __( 'Allow downloading the full signature list (about 10,000 plugins) from GitHub. It sends nothing from this site. A list you already downloaded stays in use when this is off, and no request is made. Delete downloaded list removes it', 'axle-leftovers' ) ),
 		);
 		foreach ( $checks as $key => $labels ) {
 			echo '<tr><th scope="row">' . esc_html( $labels[0] ) . '</th><td><label><input type="checkbox" name="' . esc_attr( $key ) . '" value="1"' . checked( $settings[ $key ], true, false ) . '> ' . esc_html( $labels[1] ) . '</label></td></tr>';
@@ -524,6 +616,36 @@ final class Page implements Service {
 		echo '</tbody></table>';
 		submit_button( __( 'Save settings', 'axle-leftovers' ) );
 		echo '</form>';
+		$this->render_dataset();
+	}
+
+	/**
+	 * The signature list: what is loaded, and the download and delete buttons.
+	 */
+	private function render_dataset(): void {
+		$info = ( new Dataset() )->info();
+		echo '<div class="alo-dataset">';
+		echo '<h2>' . esc_html__( 'Signature list', 'axle-leftovers' ) . '</h2>';
+		echo '<ul class="alo-dataset-info">';
+		/* translators: 1: number of plugins, 2: date. */
+		echo '<li class="alo-dataset-bundled">' . esc_html( sprintf( __( 'Bundled list: %1$s plugins, built %2$s.', 'axle-leftovers' ), number_format_i18n( $info['bundled_count'] ), '' !== $info['bundled_built'] ? $info['bundled_built'] : __( 'on an unknown date', 'axle-leftovers' ) ) ) . '</li>';
+		if ( $info['downloaded'] ) {
+			/* translators: 1: number of plugins, 2: build date, 3: download date. */
+			echo '<li class="alo-dataset-full">' . esc_html( sprintf( __( 'Full list: %1$s plugins, built %2$s, downloaded %3$s.', 'axle-leftovers' ), number_format_i18n( (int) $info['downloaded']['count'] ), $info['downloaded']['built'], Display::date( (string) ( $info['downloaded']['fetched_gmt'] ?? '' ) ) ) );
+			$this->action_form( 'dataset_remove', __( 'Delete downloaded list', 'axle-leftovers' ), false, __( 'Delete the downloaded list? The bundled list is used instead. You can download it again later.', 'axle-leftovers' ) );
+			echo '</li>';
+		} else {
+			echo '<li class="alo-dataset-full">' . esc_html__( 'Full list: not downloaded.', 'axle-leftovers' ) . '</li>';
+		}
+		/* translators: %s: number of plugins. */
+		echo '<li class="alo-dataset-count">' . esc_html( sprintf( __( 'In use: %s plugins (the full list first, the bundled list for the rest).', 'axle-leftovers' ), number_format_i18n( $info['count'] ) ) ) . '</li>';
+		echo '</ul>';
+		if ( Settings::remote_dataset() ) {
+			$this->action_form( 'dataset_download', $info['downloaded'] ? __( 'Update the full list', 'axle-leftovers' ) : __( 'Download the full list', 'axle-leftovers' ), false );
+		} else {
+			echo '<p class="description">' . esc_html__( 'To download the full list, allow it above and save the settings.', 'axle-leftovers' ) . '</p>';
+		}
+		echo '</div>';
 	}
 
 	/**
@@ -546,11 +668,12 @@ final class Page implements Service {
 	 * @param string $action  Action.
 	 * @param string $label   Button label.
 	 * @param bool   $network Network screen.
+	 * @param string $confirm Question to ask before submitting. Default: none.
 	 */
-	private function action_form( string $action, string $label, bool $network ): void {
+	private function action_form( string $action, string $label, bool $network, string $confirm = '' ): void {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form alo-' . esc_attr( $action ) . '-form">';
 		$this->hidden( $action, $network );
-		echo '<button type="submit" class="button">' . esc_html( $label ) . '</button>';
+		echo '<button type="submit" class="button"' . ( '' !== $confirm ? ' data-alo-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>' . esc_html( $label ) . '</button>';
 		echo '</form>';
 	}
 
@@ -681,6 +804,34 @@ final class Page implements Service {
 						$this->set_flash( 'success', sprintf( __( 'Read %s again.', 'axle-leftovers' ), $entry['name'] ) );
 					}
 				}
+				break;
+
+			case 'lookup':
+				$tab    = 'unknown';
+				$parts  = explode( ':', isset( $_POST['item'] ) ? sanitize_text_field( wp_unslash( $_POST['item'] ) ) : '', 2 );
+				$result = 2 === count( $parts ) ? $this->lookup->for_item( $this->scanner, $parts[0], $parts[1] ) : new \WP_Error( 'axle_leftovers_not_listed', Messages::get( 'nothing_selected' ) );
+				if ( is_wp_error( $result ) ) {
+					$this->set_flash( 'error', $result->get_error_message() );
+				} else {
+					$this->set_flash( empty( $result['result']['candidates'] ) ? 'warning' : 'success', $this->lookup_summary( $result['result'], $parts[1] ) );
+				}
+				break;
+
+			case 'dataset_download':
+				$tab    = 'settings';
+				$result = $this->updater->download();
+				if ( is_wp_error( $result ) ) {
+					$this->set_flash( 'error', $result->get_error_message() );
+				} else {
+					/* translators: 1: number of plugins, 2: date. */
+					$this->set_flash( 'success', sprintf( __( 'Downloaded the full list: %1$s plugins, built %2$s.', 'axle-leftovers' ), number_format_i18n( (int) $result['count'] ), $result['built'] ) );
+				}
+				break;
+
+			case 'dataset_remove':
+				$tab = 'settings';
+				$this->updater->remove();
+				$this->set_flash( 'success', __( 'Deleted the downloaded list. The bundled list is used.', 'axle-leftovers' ) );
 				break;
 
 			case 'settings':
