@@ -1,0 +1,88 @@
+{
+  "$comment": "Screens tests/e2e/a11y.spec.js checks with axe-core. This file belongs to the plugin: apply-template.py only writes it when it is missing. The fields are described in docs/DEVELOPMENT.md.",
+  "include": ["#wpbody-content"],
+  "exclude": [],
+  "screens": [
+    {
+      "name": "By plugin, nothing left",
+      "setup": [{ "js": "seed.js", "call": "installHelpers" }, { "js": "seed.js", "call": "resetAll" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "waitFor": ".alo-empty" }]
+    },
+    {
+      "name": "By plugin with a card open, Certain items and a reference block",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "js": "seed.js", "call": "installConsumer" }, { "wp": ["axle-leftovers", "scan"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "click": ".alo-review summary" }, { "waitFor": ".alo-items" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Unknown, empty",
+      "setup": [{ "js": "seed.js", "call": "resetAll" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=unknown",
+      "steps": [{ "waitFor": ".alo-empty" }]
+    },
+    {
+      "name": "Unknown with an item",
+      "setup": [{ "js": "seed.js", "call": "makeUnknownTable" }, { "wp": ["axle-leftovers", "scan"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=unknown",
+      "steps": [{ "waitFor": ".alo-items" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "The trash confirmation with a typed name and an error",
+      "setup": [{ "js": "seed.js", "call": "makeUnknownTable" }, { "wp": ["axle-leftovers", "scan"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=unknown",
+      "steps": [
+        { "click": "tr[data-item=\"table:wp_mystery_log\"] input[type=\"checkbox\"]" },
+        { "click": ".alo-trash-button" },
+        { "waitFor": "#alo-confirm[open]" },
+        { "click": ".alo-confirm-ok" },
+        { "waitFor": ".alo-confirm-error:not(:empty)" }
+      ],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Trash, empty",
+      "setup": [{ "js": "seed.js", "call": "resetAll" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=trash",
+      "steps": [{ "waitFor": ".alo-empty" }]
+    },
+    {
+      "name": "Trash with a batch, after a trash notice",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "--plugin=leftover-maker", "--yes"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=trash",
+      "steps": [{ "waitFor": ".alo-batch" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Ledger",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=ledger",
+      "steps": [{ "waitFor": ".alo-ledger" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Settings",
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=settings",
+      "steps": [{ "waitFor": ".alo-settings" }]
+    },
+    {
+      "name": "Plugins screen: the notice after a delete",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["eval", "set_transient( 'axle_leftovers_deleted_1', array( 'leftover-maker' ), 3600 );"] }],
+      "url": "/wp-admin/plugins.php",
+      "steps": [{ "waitFor": ".alo-deleted-notice" }],
+      "include": [".alo-deleted-notice"],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Plugins screen: the deactivation warning",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "cron", "lm_cleanup", "--yes"] }],
+      "url": "/wp-admin/plugins.php",
+      "steps": [{ "click": "tr[data-plugin=\"axle-leftovers/axle-leftovers.php\"] .deactivate a" }, { "waitFor": "#alo-deactivate[open]" }],
+      "include": ["#alo-deactivate"],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    }
+  ],
+  "skip": {}
+}

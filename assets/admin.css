@@ -1,0 +1,194 @@
+/* Axle Leftovers: Tools > Leftovers, Network Admin > Settings > Leftovers and the Plugins screen dialog. */
+
+.alo-status {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+	margin: 12px 0;
+}
+
+.alo-status p {
+	margin: 0;
+}
+
+.alo-inline-form {
+	display: inline-block;
+	margin: 0;
+}
+
+.alo-tabs .alo-count {
+	display: inline-block;
+	min-width: 18px;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 9px;
+	background: #f0f0f1;
+	color: #1d2327;
+	font-size: 12px;
+	line-height: 18px;
+	text-align: center;
+}
+
+.alo-panel {
+	margin-top: 16px;
+}
+
+.alo-cost {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.alo-card,
+.alo-batch {
+	margin: 0 0 16px;
+	padding: 12px 16px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	background: #fff;
+}
+
+.alo-card-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.alo-card h2,
+.alo-batch h2 {
+	margin: 0;
+	font-size: 16px;
+}
+
+.alo-meta {
+	margin: 4px 0;
+	color: #50575e;
+}
+
+.alo-review summary {
+	margin: 8px 0;
+	color: #2271b1;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.alo-badge {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 18px;
+}
+
+.alo-badge-certain {
+	background: #d1e7dd;
+	color: #0a3622;
+}
+
+.alo-badge-likely {
+	background: #cfe2ff;
+	color: #052c65;
+}
+
+.alo-badge-guess {
+	background: #fff3cd;
+	color: #4d3800;
+}
+
+.alo-badge-unknown {
+	background: #e2e3e5;
+	color: #2b2f32;
+}
+
+.alo-items code,
+.alo-trash-items code,
+.alo-ledger code {
+	word-break: break-all;
+}
+
+.alo-type,
+.alo-autoload,
+.alo-network {
+	color: #50575e;
+	font-size: 12px;
+}
+
+.alo-autoload,
+.alo-network {
+	padding: 0 6px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+}
+
+.alo-evidence {
+	margin: 4px 0 0 16px;
+	list-style: disc;
+}
+
+.alo-evidence li {
+	margin: 0;
+}
+
+.alo-blocked {
+	color: #8a2424;
+	font-weight: 600;
+}
+
+.alo-empty {
+	padding: 16px;
+	border: 1px dashed #c3c4c7;
+	background: #fff;
+}
+
+.alo-modal {
+	max-width: 560px;
+	padding: 16px 24px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.alo-modal::backdrop {
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.alo-modal h2 {
+	margin-top: 0;
+}
+
+.alo-confirm-list {
+	max-height: 200px;
+	overflow: auto;
+	margin-left: 16px;
+	list-style: disc;
+	font-family: Consolas, Monaco, monospace;
+}
+
+.alo-confirm-error {
+	color: #8a2424;
+	font-weight: 600;
+}
+
+.alo-confirm-error:empty {
+	display: none;
+}
+
+.alo-modal-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.alo-batch-actions {
+	margin-bottom: 0;
+}
+
+@media screen and (max-width: 782px) {
+	.alo-items td:nth-child(3),
+	.alo-items th:nth-child(3) {
+		display: none;
+	}
+}
