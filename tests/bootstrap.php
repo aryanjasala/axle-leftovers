@@ -9,6 +9,11 @@
 
 require dirname( __DIR__ ) . '/vendor/autoload.php';
 require __DIR__ . '/Stubs/wordpress.php';
-require __DIR__ . '/Stubs/wpcli.php';
 
 defined( 'ABSPATH' ) || define( 'ABSPATH', __DIR__ . '/' );
+
+// Plugin-specific additions (more stubs, fakes) live in bootstrap-local.php,
+// which the shared template never overwrites.
+if ( is_readable( __DIR__ . '/bootstrap-local.php' ) ) {
+	require __DIR__ . '/bootstrap-local.php';
+}
