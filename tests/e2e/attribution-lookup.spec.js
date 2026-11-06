@@ -59,7 +59,7 @@ test.describe( 'Online lookup and the full list', () => {
 	test( 'a name only one plugin uses is Likely, shown with its evidence, and cached', async ( { page } ) => {
 		seed.makeLookupItems();
 		await page.goto( UNKNOWN );
-		await row( page, 'lmx_unique_setting' ).getByRole( 'button', { name: 'Look up lmx_unique_setting on WordPress.org' } ).click();
+		await row( page, 'lmx_unique_setting' ).getByRole( 'button', { name: 'Look it up: lmx_unique_setting on WordPress.org' } ).click();
 
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'only Acme Widgets names it in its code (Likely)' );
 		expect( posts() ).toHaveLength( 1 );
@@ -90,7 +90,7 @@ test.describe( 'Online lookup and the full list', () => {
 	test( 'several plugins is a Guess, the most installed first, and still needs the typed name', async ( { page } ) => {
 		seed.makeLookupItems();
 		await page.goto( UNKNOWN );
-		await row( page, 'lmx_shared_setting' ).getByRole( 'button', { name: /Look up lmx_shared_setting/ } ).click();
+		await row( page, 'lmx_shared_setting' ).getByRole( 'button', { name: /Look it up: lmx_shared_setting/ } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( '2 plugins name it. The most installed is Big Widgets (Guess)' );
 
 		await page.getByRole( 'link', { name: /By plugin/ } ).click();
@@ -107,12 +107,12 @@ test.describe( 'Online lookup and the full list', () => {
 	test( 'a name nobody uses stays Unknown with a note, and is not asked about again', async ( { page } ) => {
 		seed.makeLookupItems();
 		await page.goto( UNKNOWN );
-		await row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look up lmx_nobody_setting/ } ).click();
+		await row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look it up: lmx_nobody_setting/ } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'no plugin on WordPress.org names it in its code' );
 
 		await expect( row( page, 'lmx_nobody_setting' ) ).toBeVisible();
 		await expect( row( page, 'lmx_nobody_setting' ).locator( '.alo-lookup-note' ) ).toContainText( 'no plugin on WordPress.org names it' );
-		await expect( row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look up/ } ) ).toHaveCount( 0 );
+		await expect( row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look it up/ } ) ).toHaveCount( 0 );
 		expect( show( 'lmx_nobody_setting' ).confidence ).toBe( 'unknown' );
 		expect( posts() ).toHaveLength( 1 );
 	} );
@@ -121,10 +121,10 @@ test.describe( 'Online lookup and the full list', () => {
 		seed.makeLookupItems();
 		wp( 'option', 'update', 'alo_e2e_interval', '600' );
 		await page.goto( UNKNOWN );
-		await row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look up/ } ).click();
+		await row( page, 'lmx_nobody_setting' ).getByRole( 'button', { name: /Look it up/ } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'no plugin on WordPress.org names it' );
 
-		await row( page, 'lmx_shared_setting' ).getByRole( 'button', { name: /Look up/ } ).click();
+		await row( page, 'lmx_shared_setting' ).getByRole( 'button', { name: /Look it up/ } ).click();
 		await expect( page.locator( '.alo-notice.notice-error' ) ).toContainText( /Try again in \d+ seconds/ );
 		expect( posts() ).toHaveLength( 1 );
 	} );
