@@ -25,8 +25,32 @@ final class Display {
 	public static function badge( string $confidence ): string {
 		$levels = Settings::confidence_levels();
 		$label  = $levels[ $confidence ] ?? $confidence;
+		$tones  = array(
+			'certain' => 'good',
+			'likely'  => 'info',
+			'guess'   => 'warning',
+			'unknown' => 'neutral',
+		);
 
-		return '<span class="alo-badge alo-badge-' . esc_attr( $confidence ) . '">' . esc_html( $label ) . '</span>';
+		return '<span class="axle-badge axle-badge--' . esc_attr( $tones[ $confidence ] ?? 'neutral' ) . ' alo-badge alo-badge-' . esc_attr( $confidence ) . '">' . esc_html( $label ) . '</span>';
+	}
+
+	/**
+	 * A GMT date as relative time, with the exact time on hover.
+	 *
+	 * @param string $gmt MySQL datetime in GMT.
+	 * @return string HTML.
+	 */
+	public static function time( string $gmt ): string {
+		$time = '' === $gmt || 0 === strpos( $gmt, '0000' ) ? false : strtotime( $gmt . ' UTC' );
+		if ( ! $time ) {
+			return '';
+		}
+		$now = time();
+		/* translators: %s: a time span such as "5 minutes". */
+		$text = $time > $now ? sprintf( __( 'in %s', 'axle-leftovers' ), human_time_diff( $now, $time ) ) : sprintf( __( '%s ago', 'axle-leftovers' ), human_time_diff( $time, $now ) );
+
+		return '<time datetime="' . esc_attr( gmdate( 'c', $time ) ) . '" title="' . esc_attr( self::date( $gmt ) ) . '">' . esc_html( $text ) . '</time>';
 	}
 
 	/**

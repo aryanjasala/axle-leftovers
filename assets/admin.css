@@ -1,15 +1,7 @@
-/* Axle Leftovers: Tools > Leftovers, Network Admin > Settings > Leftovers and the Plugins screen dialog. */
+/* Axle Leftovers: layout that only this plugin needs, and the dialogs on the Plugins screen. */
 
 .alo-status {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px 16px;
-	margin: 12px 0;
-}
-
-.alo-status p {
-	margin: 0;
+	margin-top: 0;
 }
 
 .alo-inline-form {
@@ -18,88 +10,19 @@
 }
 
 .alo-tabs .alo-count {
-	display: inline-block;
-	min-width: 18px;
 	margin-left: 4px;
-	padding: 0 6px;
 	border-radius: 9px;
-	background: #f0f0f1;
-	color: #1d2327;
-	font-size: 12px;
-	line-height: 18px;
-	text-align: center;
 }
 
-.alo-panel {
-	margin-top: 16px;
-}
-
-.alo-cost {
-	font-size: 14px;
-	font-weight: 600;
-}
-
-.alo-card,
-.alo-batch {
-	margin: 0 0 16px;
-	padding: 12px 16px;
-	border: 1px solid #c3c4c7;
-	border-radius: 4px;
-	background: #fff;
-}
-
-.alo-card-head {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 8px;
-}
-
-.alo-card h2,
-.alo-batch h2 {
-	margin: 0;
-	font-size: 16px;
-}
-
-.alo-meta {
+.alo-card .alo-meta,
+.alo-batch .alo-meta {
 	margin: 4px 0;
-	color: #50575e;
 }
 
 .alo-review summary {
 	margin: 8px 0;
-	color: #2271b1;
 	font-weight: 600;
 	cursor: pointer;
-}
-
-.alo-badge {
-	display: inline-block;
-	padding: 1px 8px;
-	border-radius: 10px;
-	font-size: 12px;
-	font-weight: 600;
-	line-height: 18px;
-}
-
-.alo-badge-certain {
-	background: #d1e7dd;
-	color: #0a3622;
-}
-
-.alo-badge-likely {
-	background: #cfe2ff;
-	color: #052c65;
-}
-
-.alo-badge-guess {
-	background: #fff3cd;
-	color: #4d3800;
-}
-
-.alo-badge-unknown {
-	background: #e2e3e5;
-	color: #2b2f32;
 }
 
 .alo-items code,
@@ -108,18 +31,13 @@
 	word-break: break-all;
 }
 
-.alo-type,
-.alo-autoload,
-.alo-network {
-	color: #50575e;
+.alo-type {
 	font-size: 12px;
 }
 
 .alo-autoload,
 .alo-network {
-	padding: 0 6px;
-	border: 1px solid #c3c4c7;
-	border-radius: 3px;
+	margin-left: 4px;
 }
 
 .alo-evidence {
@@ -132,22 +50,15 @@
 }
 
 .alo-blocked {
-	color: #8a2424;
+	color: var(--axle-error-text, #8a2424);
 	font-weight: 600;
-}
-
-.alo-empty {
-	padding: 16px;
-	border: 1px dashed #c3c4c7;
-	background: #fff;
 }
 
 .alo-modal {
 	max-width: 560px;
 	padding: 16px 24px;
-	border: 1px solid #c3c4c7;
+	border: 1px solid var(--axle-border, #c3c4c7);
 	border-radius: 4px;
-	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
 }
 
 .alo-modal::backdrop {
@@ -167,7 +78,7 @@
 }
 
 .alo-confirm-error {
-	color: #8a2424;
+	color: var(--axle-error-text, #8a2424);
 	font-weight: 600;
 }
 
@@ -184,6 +95,10 @@
 
 .alo-batch-actions {
 	margin-bottom: 0;
+}
+
+.alo-dataset .alo-dataset-info {
+	margin-left: 20px;
 }
 
 @media screen and (max-width: 782px) {
@@ -204,4 +119,9 @@
 
 .alo-lookup-note {
 	margin: 4px 0 0;
+}
+
+/* Workaround: the shared danger button text is #d63638, 4.4:1 on the button background of WordPress 6.9. Remove once axle-ui.css uses the error text colour. */
+.axle-ui .button.axle-button--danger {
+	color: var(--axle-error-text);
 }
