@@ -120,3 +120,8 @@
 .alo-lookup-note {
 	margin: 4px 0 0;
 }
+
+/* Workaround: the shared danger button text is #d63638, 4.4:1 on the button background of WordPress 6.9. Remove once axle-ui.css uses the error text colour. */
+.axle-ui .button.axle-button--danger {
+	color: var(--axle-error-text);
+}
