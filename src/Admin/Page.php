@@ -458,7 +458,7 @@ final class Page implements Service {
 			'<p><button type="submit" form="alo-lookup-form" name="item" value="%1$s" class="button button-small alo-lookup" aria-label="%2$s">%3$s</button></p>',
 			esc_attr( $item['id'] ),
 			/* translators: %s: item name. */
-			esc_attr( sprintf( __( 'Look up %s on WordPress.org', 'axle-leftovers' ), $item['name'] ) ),
+			esc_attr( sprintf( __( 'Look it up: %s on WordPress.org', 'axle-leftovers' ), $item['name'] ) ),
 			esc_html__( 'Look it up', 'axle-leftovers' )
 		);
 	}
