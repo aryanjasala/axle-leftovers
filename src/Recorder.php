@@ -22,6 +22,9 @@ defined( 'ABSPATH' ) || exit;
  *   the owner. Known names are skipped without a backtrace.
  * - Around plugin deletion: a snapshot before and after uninstall.php, and the
  *   code signature, read while the files still exist.
+ * - Themes: the code signature of the theme left and the theme switched to, at
+ *   the switch, and again before a theme is deleted. A deleted theme is marked
+ *   removed. Themes sit in the ledger as `theme:<folder>`.
  */
 class Recorder implements Service {
 
@@ -76,6 +79,9 @@ class Recorder implements Service {
 		add_action( 'delete_plugin', array( $this, 'before_delete' ), 10, 1 );
 		add_action( 'deleted_plugin', array( $this, 'after_delete' ), 10, 2 );
 		add_action( 'upgrader_process_complete', array( $this, 'after_update' ), 10, 2 );
+		add_action( 'switch_theme', array( $this, 'theme_switched' ), 10, 3 );
+		add_action( 'delete_theme', array( $this, 'before_theme_delete' ), 10, 1 );
+		add_action( 'deleted_theme', array( $this, 'after_theme_delete' ), 10, 2 );
 
 		if ( ! Settings::runtime_ledger() ) {
 			return;
@@ -195,6 +201,103 @@ class Recorder implements Service {
 		$this->ledger->mark_removed( $slug, defined( 'WP_CLI' ) && WP_CLI ? 'cli' : 'admin' );
 		Scanner::mark_stale();
 		Notices::remember_deleted( $slug );
+	}
+
+	/**
+	 * A theme switch: reads the code of the theme left and of the new theme.
+	 *
+	 * @param mixed $new_name  Name of the new theme.
+	 * @param mixed $new_theme The new theme, a WP_Theme.
+	 * @param mixed $old_theme The theme left, a WP_Theme, or false.
+	 */
+	public function theme_switched( $new_name, $new_theme = null, $old_theme = false ): void {
+		$new = is_object( $new_theme ) && method_exists( $new_theme, 'get_stylesheet' ) ? (string) $new_theme->get_stylesheet() : '';
+		$old = is_object( $old_theme ) && method_exists( $old_theme, 'get_stylesheet' ) ? (string) $old_theme->get_stylesheet() : '';
+
+		// The files are still there at the switch; they may be gone the next time anyone looks.
+		foreach ( array_unique( array_filter( array( $old, $new ) ) ) as $stylesheet ) {
+			$this->ensure_theme_signature( $stylesheet, false, array( 'activation' ) );
+		}
+		Themes::flush();
+		Scanner::mark_stale();
+
+		/**
+		 * Fires after Leftovers recorded a theme switch.
+		 *
+		 * @param string $new Folder name of the theme switched to.
+		 * @param string $old Folder name of the theme left, or '' when unknown.
+		 */
+		do_action( 'axle_leftovers_theme_switched', $new, $old );
+	}
+
+	/**
+	 * Reads a theme's code just before it is deleted.
+	 *
+	 * @param mixed $stylesheet Theme folder name.
+	 */
+	public function before_theme_delete( $stylesheet ): void {
+		$this->ensure_theme_signature( (string) $stylesheet );
+	}
+
+	/**
+	 * Marks a theme removed, and leaves a notice for the person who deleted it.
+	 *
+	 * @param mixed $stylesheet Theme folder name.
+	 * @param mixed $deleted    Whether the files were deleted.
+	 */
+	public function after_theme_delete( $stylesheet, $deleted = true ): void {
+		if ( ! $deleted ) {
+			return;
+		}
+
+		$slug = 'theme:' . (string) $stylesheet;
+		Themes::flush();
+		$this->ledger->mark_removed( $slug, defined( 'WP_CLI' ) && WP_CLI ? 'cli' : 'admin' );
+		Scanner::mark_stale();
+		Notices::remember_deleted( $slug );
+		$entry = $this->ledger->get( $slug );
+
+		/**
+		 * Fires when a theme in the ledger was deleted from wp-admin or WP-CLI.
+		 *
+		 * @param string     $stylesheet Theme folder name.
+		 * @param array|null $entry      The ledger entry (slug `theme:<folder>`), or null when the theme was never seen.
+		 */
+		do_action( 'axle_leftovers_theme_removed', (string) $stylesheet, $entry );
+	}
+
+	/**
+	 * Scans a theme's code when its stored signature is missing or for another version.
+	 *
+	 * @param string   $stylesheet Theme folder name.
+	 * @param bool     $force      Read the code even when the stored signature is current.
+	 * @param string[] $sources    Sources to add to the entry.
+	 * @return array|null The ledger entry, or null when the theme is not installed.
+	 */
+	public function ensure_theme_signature( string $stylesheet, bool $force = false, array $sources = array() ): ?array {
+		$theme = wp_get_theme( $stylesheet );
+		if ( ! $theme->exists() ) {
+			return null;
+		}
+
+		$slug    = 'theme:' . $stylesheet;
+		$entry   = $this->ledger->get( $slug );
+		$version = (string) $theme->get( 'Version' );
+		if ( ! $force && $entry && null !== $entry['signature'] && $version === $entry['signature_version'] && null === $entry['removed_gmt'] ) {
+			return $entry;
+		}
+
+		$name = (string) $theme->get( 'Name' );
+
+		return $this->ledger->record_plugin(
+			$slug,
+			array(
+				'name'    => '' !== $name ? $name : $stylesheet,
+				'version' => $version,
+			),
+			array_merge( array( 'static' ), $sources ),
+			Signature::scan_path( (string) $theme->get_stylesheet_directory() )
+		);
 	}
 
 	/**

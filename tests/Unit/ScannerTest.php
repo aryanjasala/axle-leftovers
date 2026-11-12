@@ -14,6 +14,7 @@ use AryanX\Axle\Leftovers\Ledger;
 use AryanX\Axle\Leftovers\Recorder;
 use AryanX\Axle\Leftovers\References;
 use AryanX\Axle\Leftovers\Scanner;
+use AryanX\Axle\Leftovers\Tests\FakeTheme;
 use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
@@ -25,6 +26,7 @@ final class ScannerTest extends LeftoversTestCase {
 
 	public function test_a_scan_lists_items_nothing_installed_owns(): void {
 		Functions\when( 'get_plugins' )->justReturn( array() );
+		Functions\when( 'wp_get_theme' )->justReturn( new FakeTheme( 'twentytwentyfive', false ) );
 		Functions\when( 'wp_cache_delete' )->justReturn( true );
 		Functions\when( 'wp_clear_scheduled_hook' )->justReturn( 0 );
 		Functions\when( 'has_action' )->alias(

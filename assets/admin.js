@@ -1,7 +1,8 @@
 /**
- * Tools > Leftovers and the Plugins screen: the trash confirmation with typed
- * names, select all, the deactivation warning, the notice after an AJAX
- * delete, and the wp.hooks extension points.
+ * Tools > Leftovers and the Plugins and Themes screens: the in-place confirm
+ * step (with typed names for items whose owner is not certain), select all,
+ * busy states, spoken results, the deactivation warning, the notice after an
+ * AJAX delete, and the wp.hooks extension points.
  *
  * Filters (namespace axleLeftovers):
  * - axleLeftovers.confirmMessage( message, { items } ): the text of the trash confirmation.
@@ -30,6 +31,13 @@
 		const h = hooks();
 		if ( h ) {
 			h.doAction( name, ...args );
+		}
+	}
+
+	/** Announces a result to screen readers, when wp.a11y is loaded. */
+	function speak( message, politeness ) {
+		if ( message && window.wp && window.wp.a11y && 'function' === typeof window.wp.a11y.speak ) {
+			window.wp.a11y.speak( message, politeness || 'polite' );
 		}
 	}
 
@@ -62,63 +70,65 @@
 		} );
 	}
 
-	/** The trash confirmation, with a typed name for items whose owner is not certain. */
-	function trashConfirmation() {
-		const dialog = document.getElementById( 'alo-confirm' );
-		if ( ! dialog || 'function' !== typeof dialog.showModal ) {
-			return;
+	/**
+	 * The confirm step, shown in place: one panel that moves to sit under the
+	 * button that asked, says what will change and whether it can be undone,
+	 * and takes focus. Escape or Cancel puts focus back on the button.
+	 */
+	function confirmPanel() {
+		const panel = document.getElementById( 'alo-confirm' );
+		if ( ! panel ) {
+			return null;
 		}
-		const message = dialog.querySelector( '#alo-confirm-message' );
-		const list = dialog.querySelector( '.alo-confirm-list' );
-		const typed = dialog.querySelector( '.alo-confirm-typed' );
-		const error = dialog.querySelector( '.alo-confirm-error' );
-		let form = null;
+		const title = panel.querySelector( '#alo-confirm-title' );
+		const message = panel.querySelector( '#alo-confirm-message' );
+		const list = panel.querySelector( '.alo-confirm-list' );
+		const typed = panel.querySelector( '.alo-confirm-typed' );
+		const error = panel.querySelector( '.alo-confirm-error' );
+		const ok = panel.querySelector( '.alo-confirm-ok' );
+		let current = null;
 
-		document.querySelectorAll( '.alo-trash-form' ).forEach( ( candidate ) => {
-			candidate.addEventListener( 'submit', ( event ) => {
-				if ( candidate.dataset.aloConfirmed ) {
-					return;
-				}
-				event.preventDefault();
-				form = candidate;
-				const boxes = Array.from( candidate.querySelectorAll( 'input[name="items[]"]:checked' ) );
-				const items = boxes.map( ( box ) => ( { id: box.value, name: box.dataset.name, typed: '1' === box.dataset.typed } ) );
+		function close( restoreFocus ) {
+			panel.hidden = true;
+			if ( current && restoreFocus && current.opener ) {
+				current.opener.focus();
+			}
+			current = null;
+		}
 
-				list.textContent = '';
-				typed.textContent = '';
-				error.textContent = '';
-				if ( ! items.length ) {
-					message.textContent = i18n.nothing || '';
-					dialog.querySelector( '.alo-confirm-ok' ).hidden = true;
-					dialog.showModal();
-					return;
-				}
-				dialog.querySelector( '.alo-confirm-ok' ).hidden = false;
-
-				const text = 1 === items.length ? i18n.confirmOne : format( i18n.confirm, items.length );
-				message.textContent = applyFilters( 'axleLeftovers.confirmMessage', text, { items } );
-				items.slice( 0, 50 ).forEach( ( item ) => list.appendChild( element( 'li', {}, item.name ) ) );
-
-				const needTyping = items.filter( ( item ) => item.typed );
-				if ( needTyping.length ) {
+		/** Shows the panel under `anchor`. options: opener, title, message, items, okLabel, danger, onConfirm. */
+		function open( anchor, options ) {
+			current = options;
+			anchor.insertAdjacentElement( 'afterend', panel );
+			title.textContent = options.title || '';
+			message.textContent = options.message || '';
+			list.textContent = '';
+			typed.textContent = '';
+			error.textContent = '';
+			( options.items || [] ).slice( 0, 50 ).forEach( ( item ) => list.appendChild( element( 'li', {}, item.name ) ) );
+			list.hidden = ! ( options.items || [] ).length;
+			( options.items || [] ).filter( ( item ) => item.typed ).forEach( ( item, index ) => {
+				if ( ! index ) {
 					typed.appendChild( element( 'p', {}, i18n.typeName || '' ) );
-					needTyping.forEach( ( item, index ) => {
-						const id = `alo-type-${ index }`;
-						const row = element( 'p' );
-						row.appendChild( element( 'label', { for: id }, format( i18n.typeLabel, item.name ) ) );
-						row.appendChild( document.createElement( 'br' ) );
-						row.appendChild( element( 'input', { type: 'text', id, class: 'regular-text alo-typed-name', 'data-expected': item.name, autocomplete: 'off', spellcheck: 'false' } ) );
-						typed.appendChild( row );
-					} );
 				}
-				dialog.showModal();
-				const first = typed.querySelector( 'input' );
-				( first || dialog.querySelector( '.alo-confirm-ok' ) ).focus();
+				const id = `alo-type-${ index }`;
+				const row = element( 'p' );
+				row.appendChild( element( 'label', { for: id }, format( i18n.typeLabel, item.name ) ) );
+				row.appendChild( document.createElement( 'br' ) );
+				row.appendChild( element( 'input', { type: 'text', id, class: 'regular-text alo-typed-name', 'data-expected': item.name, autocomplete: 'off', spellcheck: 'false' } ) );
+				typed.appendChild( row );
 			} );
-		} );
+			ok.textContent = options.okLabel || '';
+			ok.hidden = ! options.onConfirm;
+			ok.className = 'button alo-confirm-ok ' + ( options.danger ? 'axle-button--danger' : 'button-primary' );
+			panel.classList.toggle( 'axle-confirm--danger', !! options.danger );
+			panel.hidden = false;
+			speak( options.message || options.title );
+			( typed.querySelector( 'input' ) || ( options.onConfirm ? ok : title ) ).focus();
+		}
 
-		dialog.querySelector( '.alo-confirm-ok' ).addEventListener( 'click', () => {
-			if ( ! form ) {
+		ok.addEventListener( 'click', () => {
+			if ( ! current ) {
 				return;
 			}
 			const inputs = Array.from( typed.querySelectorAll( '.alo-typed-name' ) );
@@ -129,32 +139,123 @@
 				wrong.focus();
 				return;
 			}
-			const holder = form.querySelector( '.alo-confirm-names' );
-			holder.textContent = '';
-			inputs.forEach( ( input ) => holder.appendChild( element( 'input', { type: 'hidden', name: 'confirm_names[]', value: input.value.trim() } ) ) );
-			form.dataset.aloConfirmed = '1';
-			dialog.close();
-			form.submit();
+			const done = current.onConfirm;
+			const names = inputs.map( ( input ) => input.value.trim() );
+			close( false );
+			done( names );
+		} );
+		panel.querySelector( '.alo-confirm-cancel' ).addEventListener( 'click', () => close( true ) );
+		panel.addEventListener( 'keydown', ( event ) => {
+			if ( 'Escape' === event.key ) {
+				event.preventDefault();
+				close( true );
+			}
 		} );
 
-		dialog.querySelector( '.alo-confirm-cancel' ).addEventListener( 'click', () => dialog.close() );
+		return { open, close };
 	}
 
-	/** Buttons that delete for good ask first. */
-	function confirmButtons() {
-		document.querySelectorAll( '[data-alo-confirm]' ).forEach( ( button ) => {
-			button.addEventListener( 'click', ( event ) => {
-				// eslint-disable-next-line no-alert
-				if ( ! window.confirm( button.getAttribute( 'data-alo-confirm' ) ) ) {
-					event.preventDefault();
+	/** The trash confirmation: lists the items, asks for typed names, says it can be undone. */
+	function trashConfirmation( panel ) {
+		document.querySelectorAll( '.alo-trash-form' ).forEach( ( form ) => {
+			form.addEventListener( 'submit', ( event ) => {
+				if ( form.dataset.aloConfirmed ) {
+					return;
 				}
+				event.preventDefault();
+				if ( ! panel ) {
+					return;
+				}
+				const boxes = Array.from( form.querySelectorAll( 'input[name="items[]"]:checked' ) );
+				const items = boxes.map( ( box ) => ( { id: box.value, name: box.dataset.name, typed: '1' === box.dataset.typed } ) );
+				const opener = form.querySelector( '.alo-trash-button' );
+				const anchor = opener.closest( 'p' ) || opener;
+
+				if ( ! items.length ) {
+					panel.open( anchor, { opener, title: i18n.nothing, message: '', items: [] } );
+					return;
+				}
+				const text = 1 === items.length ? i18n.confirmOne : format( i18n.confirm, items.length );
+				panel.open( anchor, {
+					opener,
+					title: i18n.trashTitle,
+					message: applyFilters( 'axleLeftovers.confirmMessage', text, { items } ),
+					items,
+					okLabel: i18n.trashOk,
+					onConfirm( names ) {
+						const holder = form.querySelector( '.alo-confirm-names' );
+						holder.textContent = '';
+						names.forEach( ( name ) => holder.appendChild( element( 'input', { type: 'hidden', name: 'confirm_names[]', value: name } ) ) );
+						form.dataset.aloConfirmed = '1';
+						form.requestSubmit ? form.requestSubmit() : form.submit();
+					},
+				} );
 			} );
 		} );
 	}
 
-	/** Fires axleLeftovers.trashed and axleLeftovers.restored after the screen reloads. */
+	/** Buttons that delete for good ask first, in place. */
+	function confirmButtons( panel ) {
+		document.querySelectorAll( '[data-alo-confirm]' ).forEach( ( button ) => {
+			button.addEventListener( 'click', ( event ) => {
+				if ( button.dataset.aloConfirmed || ! panel ) {
+					return;
+				}
+				event.preventDefault();
+				const form = button.closest( 'form' );
+				panel.open( button.closest( '.axle-actions, p' ) || button, {
+					opener: button,
+					title: button.getAttribute( 'data-alo-confirm-title' ) || i18n.deleteTitle,
+					message: button.getAttribute( 'data-alo-confirm' ),
+					okLabel: button.getAttribute( 'data-alo-confirm-label' ) || button.textContent.trim(),
+					danger: true,
+					onConfirm() {
+						button.dataset.aloConfirmed = '1';
+						form.requestSubmit ? form.requestSubmit( button ) : form.submit();
+					},
+				} );
+			} );
+		} );
+	}
+
+	/** After a submit that takes a while: a spinner, aria-busy, a spoken note, and no double submit. */
+	function busyForms() {
+		document.querySelectorAll( '.alo form' ).forEach( ( form ) => {
+			form.addEventListener( 'submit', ( event ) => {
+				if ( event.defaultPrevented ) {
+					return;
+				}
+				if ( form.dataset.aloBusy ) {
+					event.preventDefault();
+					return;
+				}
+				form.dataset.aloBusy = '1';
+				const button = event.submitter || form.querySelector( 'button[type="submit"], input[type="submit"]' );
+				if ( button ) {
+					button.setAttribute( 'aria-busy', 'true' );
+					button.insertAdjacentElement( 'afterend', element( 'span', { class: 'spinner is-active alo-spinner', 'aria-hidden': 'true' } ) );
+				}
+				speak( i18n.working );
+			} );
+		} );
+		// The browser can bring this page back from its cache: forget the busy state.
+		window.addEventListener( 'pageshow', () => {
+			document.querySelectorAll( '.alo form' ).forEach( ( form ) => {
+				delete form.dataset.aloBusy;
+				delete form.dataset.aloConfirmed;
+				form.querySelectorAll( '.alo-spinner' ).forEach( ( spinner ) => spinner.remove() );
+				form.querySelectorAll( '[aria-busy]' ).forEach( ( button ) => button.removeAttribute( 'aria-busy' ) );
+			} );
+		} );
+	}
+
+	/** Fires axleLeftovers.trashed and axleLeftovers.restored after the screen reloads, and speaks the notice. */
 	function events() {
-		document.querySelectorAll( '.alo-notice[data-alo-event]' ).forEach( ( notice ) => {
+		document.querySelectorAll( '.alo-notice' ).forEach( ( notice ) => {
+			speak( notice.textContent.replace( /\s+/g, ' ' ).trim(), 'error' === notice.dataset.aloTone ? 'assertive' : 'polite' );
+			if ( ! notice.hasAttribute( 'data-alo-event' ) ) {
+				return;
+			}
 			let payload = {};
 			try {
 				payload = JSON.parse( notice.getAttribute( 'data-alo-payload' ) || '{}' );
@@ -165,51 +266,88 @@
 		} );
 	}
 
-	/** Plugins screen: ask before deactivating while the trash holds items. */
+	/** Plugins screen: ask before deactivating while the trash holds items, in a row under the plugin. */
 	function deactivation() {
-		const dialog = document.getElementById( 'alo-deactivate' );
-		if ( ! dialog || 'function' !== typeof dialog.showModal ) {
+		const panel = document.getElementById( 'alo-deactivate' );
+		if ( ! panel ) {
 			return;
 		}
-		const row = document.querySelector( `tr[data-plugin="${ dialog.getAttribute( 'data-plugin' ) }"]` );
+		const row = document.querySelector( `tr[data-plugin="${ panel.getAttribute( 'data-plugin' ) }"]` );
 		const link = row ? row.querySelector( '.deactivate a' ) : null;
 		if ( ! link ) {
 			return;
 		}
+		let holder = null;
+
+		function close() {
+			panel.hidden = true;
+			// Back to the page footer, so the next click finds it again.
+			document.body.appendChild( panel );
+			if ( holder ) {
+				holder.remove();
+				holder = null;
+			}
+			link.focus();
+		}
+
 		link.addEventListener( 'click', ( event ) => {
 			event.preventDefault();
-			dialog.querySelector( '.alo-deactivate-anyway' ).setAttribute( 'href', link.getAttribute( 'href' ) );
-			dialog.showModal();
+			panel.querySelector( '.alo-deactivate-anyway' ).setAttribute( 'href', link.getAttribute( 'href' ) );
+			holder = element( 'tr', { class: 'alo-confirm-row' } );
+			const cell = element( 'td', { colspan: String( row.children.length ), class: 'axle-ui' } );
+			holder.appendChild( cell );
+			cell.appendChild( panel );
+			row.insertAdjacentElement( 'afterend', holder );
+			panel.hidden = false;
+			speak( panel.querySelector( 'p' ).textContent );
+			panel.querySelector( '#alo-deactivate-title' ).focus();
 		} );
-		dialog.querySelector( '.alo-confirm-cancel' ).addEventListener( 'click', () => dialog.close() );
+		panel.querySelector( '.alo-confirm-cancel' ).addEventListener( 'click', close );
+		panel.addEventListener( 'keydown', ( event ) => {
+			if ( 'Escape' === event.key ) {
+				event.preventDefault();
+				close();
+			}
+		} );
 	}
 
-	/** Plugins screen: show what a plugin deleted over AJAX left behind. */
+	/** Plugins and Themes screens: show what a plugin or theme deleted over AJAX left behind. */
 	function ajaxDeletes() {
 		if ( ! window.jQuery || ! window.wp || ! window.wp.apiFetch || ! data.noticeRoute ) {
 			return;
 		}
-		window.jQuery( document ).on( 'wp-plugin-delete-success', () => {
+		window.jQuery( document ).on( 'wp-plugin-delete-success wp-theme-delete-success', () => {
+			const anchor = document.querySelector( '.wp-header-end' ) || document.querySelector( '.wrap h1' );
 			window.wp
 				.apiFetch( { path: data.noticeRoute } )
 				.then( ( response ) => {
-					const anchor = document.querySelector( '.wp-header-end' ) || document.querySelector( '.wrap h1' );
 					( response.html || [] ).forEach( ( html ) => {
 						const holder = document.createElement( 'div' );
 						holder.innerHTML = html;
 						if ( anchor && holder.firstElementChild ) {
 							anchor.parentNode.insertBefore( holder.firstElementChild, anchor.nextSibling );
+							speak( holder.textContent );
 						}
 					} );
 				} )
-				.catch( () => null );
+				.catch( () => {
+					// Say that the look failed and what to do next, instead of showing nothing.
+					if ( anchor ) {
+						const notice = element( 'div', { class: 'notice notice-error is-dismissible alo-deleted-notice', role: 'alert' } );
+						notice.appendChild( element( 'p', {}, i18n.deleteError || '' ) );
+						anchor.parentNode.insertBefore( notice, anchor.nextSibling );
+						speak( i18n.deleteError, 'assertive' );
+					}
+				} );
 		} );
 	}
 
 	function init() {
+		const panel = confirmPanel();
 		selectAll();
-		trashConfirmation();
-		confirmButtons();
+		trashConfirmation( panel );
+		confirmButtons( panel );
+		busyForms();
 		events();
 		deactivation();
 		ajaxDeletes();

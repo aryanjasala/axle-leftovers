@@ -73,7 +73,7 @@ final class AttributionTest extends LeftoversTestCase {
 		$this->assertSame( 'certain', $who['confidence'] );
 		$this->assertFalse( $who['in_use'] );
 		$this->assertSame( array( 'activation', 'signature' ), array_column( $who['evidence'], 'code' ) );
-		$this->assertSame( 'Created when Acme was activated on 2025-04-02', $who['evidence'][0]['text'] );
+		$this->assertSame( 'Created when Acme was activated', $who['evidence'][0]['text'] );
 	}
 
 	public function test_signature_dataset_and_prefix_are_likely(): void {

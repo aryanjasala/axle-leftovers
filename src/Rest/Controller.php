@@ -94,6 +94,11 @@ final class Controller implements Service {
 				'permission_callback' => array( $this, 'permission' ),
 				'args'                => array(
 					'plugin'     => array( 'type' => 'string' ),
+					'theme'      => array( 'type' => 'string' ),
+					'kind'       => array(
+						'type' => 'string',
+						'enum' => array( 'plugin', 'theme', 'mu-plugin' ),
+					),
 					'type'       => array( 'type' => 'string' ),
 					'confidence' => array(
 						'type' => 'string',
@@ -188,6 +193,8 @@ final class Controller implements Service {
 		$filters = array(
 			'type'       => (string) $request->get_param( 'type' ),
 			'confidence' => (string) $request->get_param( 'confidence' ),
+			'theme'      => (string) $request->get_param( 'theme' ),
+			'kind'       => (string) $request->get_param( 'kind' ),
 		);
 		if ( null !== $request->get_param( 'plugin' ) ) {
 			$filters['plugin'] = (string) $request->get_param( 'plugin' );

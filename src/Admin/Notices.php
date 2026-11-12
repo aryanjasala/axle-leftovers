@@ -16,9 +16,9 @@ use const AryanX\Axle\Leftovers\PLUGIN_FILE;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * After a plugin is deleted, the person who deleted it sees what it left
- * behind, on the next Plugins screen or right away when the delete ran over
- * AJAX. While the trash holds items, deactivating Leftovers asks first.
+ * After a plugin or theme is deleted, the person who deleted it sees what it
+ * left behind, on the next Plugins or Themes screen or right away when the
+ * delete ran over AJAX. While the trash holds items, deactivating Leftovers asks first.
  */
 final class Notices implements Service {
 
@@ -56,9 +56,9 @@ final class Notices implements Service {
 	}
 
 	/**
-	 * Remembers a deleted plugin for the current user's next screen.
+	 * Remembers a deleted plugin or theme for the current user's next screen.
 	 *
-	 * @param string $slug Plugin slug.
+	 * @param string $slug Plugin slug, or `theme:<folder>` for a theme.
 	 */
 	public static function remember_deleted( string $slug ): void {
 		$user = get_current_user_id();
@@ -75,7 +75,7 @@ final class Notices implements Service {
 	}
 
 	/**
-	 * Messages for plugins the current user deleted, and forgets them.
+	 * Messages for plugins and themes the current user deleted, and forgets them.
 	 *
 	 * @return string[] Plain-text messages.
 	 */
@@ -95,14 +95,14 @@ final class Notices implements Service {
 			if ( ! $group ) {
 				continue;
 			}
-			/* translators: 1: plugin name, 2: list such as "2 tables, 12 options and 3 cron events". */
+			/* translators: 1: plugin or theme name, 2: list such as "2 tables, 12 options and 3 cron events". */
 			$message = sprintf( __( '%1$s left %2$s.', 'axle-leftovers' ), $group['owner_name'], Display::count_list( $group['counts'] ) );
 
 			/**
-			 * Filters the notice shown after a plugin is deleted.
+			 * Filters the notice shown after a plugin or theme is deleted.
 			 *
-			 * @param string $message Plain text, such as "Contact Form 7 left 2 tables and 12 options." Return '' to show nothing.
-			 * @param string $slug    The deleted plugin's slug.
+			 * @param string $message Plain text, such as "Contact Form 7 left 2 tables and 12 options." or "Old Theme left 1 option and 14 template changes." Return '' to show nothing.
+			 * @param string $slug    The deleted plugin's slug, or `theme:<folder>` for a theme.
 			 * @param array  $counts  Item type => count.
 			 */
 			$message = (string) apply_filters( 'axle_leftovers_notice_message', $message, (string) $slug, $group['counts'] );
@@ -119,7 +119,7 @@ final class Notices implements Service {
 	 */
 	public function deleted_notice(): void {
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( ! $screen || ! in_array( $screen->id, array( 'plugins', 'plugins-network' ), true ) || ! current_user_can( Settings::capability() ) ) {
+		if ( ! $screen || ! in_array( $screen->id, array( 'plugins', 'plugins-network', 'themes', 'themes-network' ), true ) || ! current_user_can( Settings::capability() ) ) {
 			return;
 		}
 
@@ -151,22 +151,19 @@ final class Notices implements Service {
 		}
 
 		$redirect = admin_url( 'plugins.php' );
-		echo '<dialog class="alo-modal" id="alo-deactivate" aria-labelledby="alo-deactivate-title" data-plugin="' . esc_attr( plugin_basename( PLUGIN_FILE ) ) . '">';
-		echo '<h2 id="alo-deactivate-title">' . esc_html__( 'The Leftovers trash is not empty', 'axle-leftovers' ) . '</h2>';
+		echo '<div class="axle-confirm" id="alo-deactivate" role="group" aria-labelledby="alo-deactivate-title" data-plugin="' . esc_attr( plugin_basename( PLUGIN_FILE ) ) . '" hidden>';
+		echo '<strong id="alo-deactivate-title" tabindex="-1">' . esc_html__( 'The Leftovers trash is not empty', 'axle-leftovers' ) . '</strong>';
 		/* translators: %d: number of items. */
-		echo '<p>' . esc_html( sprintf( _n( 'The trash holds %d item. Deactivating keeps it, but uninstalling Leftovers deletes it for good. Restore it first if you may need it.', 'The trash holds %d items. Deactivating keeps them, but uninstalling Leftovers deletes them for good. Restore them first if you may need them.', $count, 'axle-leftovers' ), $count ) ) . '</p>';
-		echo '<div class="alo-modal-actions">';
-		foreach ( array(
-			'restore_all' => __( 'Restore all', 'axle-leftovers' ),
-			'empty'       => __( 'Empty trash', 'axle-leftovers' ),
-		) as $do => $label ) {
-			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form">';
-			echo '<input type="hidden" name="action" value="' . esc_attr( Page::ACTION ) . '"><input type="hidden" name="do" value="' . esc_attr( $do ) . '"><input type="hidden" name="redirect" value="' . esc_attr( $redirect ) . '">';
-			wp_nonce_field( Page::NONCE );
-			echo '<button type="submit" class="button' . ( 'restore_all' === $do ? ' button-primary' : '' ) . '">' . esc_html( $label ) . '</button></form> ';
-		}
+		echo '<p>' . esc_html( sprintf( _n( 'The trash holds %d item. Deactivating keeps it, but uninstalling Leftovers deletes it for good, and that cannot be undone. Restore it first if you may need it.', 'The trash holds %d items. Deactivating keeps them, but uninstalling Leftovers deletes them for good, and that cannot be undone. Restore them first if you may need them.', $count, 'axle-leftovers' ), $count ) ) . '</p>';
+		echo '<p class="axle-actions">';
+		// The button points at a form outside the plugins table: a form cannot sit inside another form.
+		echo '<button type="submit" form="alo-deactivate-restore_all" class="button button-primary">' . esc_html__( 'Restore all', 'axle-leftovers' ) . '</button> ';
 		echo '<a class="button alo-deactivate-anyway" href="#">' . esc_html__( 'Deactivate anyway', 'axle-leftovers' ) . '</a> ';
 		echo '<button type="button" class="button-link alo-confirm-cancel">' . esc_html__( 'Cancel', 'axle-leftovers' ) . '</button>';
-		echo '</div></dialog>';
+		echo '</p></div>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="alo-deactivate-restore_all" hidden>';
+		echo '<input type="hidden" name="action" value="' . esc_attr( Page::ACTION ) . '"><input type="hidden" name="do" value="restore_all"><input type="hidden" name="redirect" value="' . esc_attr( $redirect ) . '">';
+		wp_nonce_field( Page::NONCE );
+		echo '</form>';
 	}
 }

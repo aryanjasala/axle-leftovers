@@ -81,7 +81,7 @@ final class Abilities implements Service {
 			self::CATEGORY,
 			array(
 				'label'       => __( 'Axle Leftovers', 'axle-leftovers' ),
-				'description' => __( 'Find what deleted plugins left behind, with evidence, and move it to a trash with undo.', 'axle-leftovers' ),
+				'description' => __( 'Find what deleted plugins and themes left behind, with evidence, and move it to a trash with undo.', 'axle-leftovers' ),
 			)
 		);
 	}
@@ -104,6 +104,7 @@ final class Abilities implements Service {
 				'scope'      => array( 'type' => 'string' ),
 				'owner'      => array( 'type' => 'string' ),
 				'owner_name' => array( 'type' => 'string' ),
+				'owner_kind' => array( 'type' => 'string' ),
 				'confidence' => array( 'type' => 'string' ),
 				'evidence'   => array( 'type' => 'array' ),
 				'rows'       => array( 'type' => 'integer' ),
@@ -135,11 +136,16 @@ final class Abilities implements Service {
 		$this->ability(
 			'list-leftovers',
 			__( 'List leftovers', 'axle-leftovers' ),
-			__( 'Tables, options, cron events, meta keys, uploads folders, roles and capabilities left by deleted plugins, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), type or confidence.', 'axle-leftovers' ),
+			__( 'Tables, options, cron events, meta keys, uploads folders, roles, capabilities, and the settings, templates, global styles and custom CSS of deleted themes, left by deleted plugins and themes, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), theme folder name, owner kind (plugin or theme), type or confidence.', 'axle-leftovers' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
 					'plugin'     => array( 'type' => 'string' ),
+					'theme'      => array( 'type' => 'string' ),
+					'kind'       => array(
+						'type' => 'string',
+						'enum' => array( 'plugin', 'theme', 'mu-plugin' ),
+					),
 					'type'       => array(
 						'type' => 'string',
 						'enum' => $types,
@@ -487,7 +493,7 @@ final class Abilities implements Service {
 	/**
 	 * Lists leftovers.
 	 *
-	 * @param array|null $input plugin, type, confidence.
+	 * @param array|null $input plugin, theme, kind, type, confidence.
 	 * @return array
 	 */
 	public function list_leftovers( $input = array() ): array {
@@ -495,6 +501,8 @@ final class Abilities implements Service {
 		$filters = array(
 			'type'       => (string) ( $input['type'] ?? '' ),
 			'confidence' => (string) ( $input['confidence'] ?? '' ),
+			'theme'      => (string) ( $input['theme'] ?? '' ),
+			'kind'       => (string) ( $input['kind'] ?? '' ),
 		);
 		if ( isset( $input['plugin'] ) ) {
 			$filters['plugin'] = (string) $input['plugin'];
@@ -522,7 +530,7 @@ final class Abilities implements Service {
 	 * @return array
 	 */
 	public function list_trash(): array {
-		return array_map( array( Trash::class, 'public_row' ), $this->trash->rows( array( 'status' => 'trashed' ) ) );
+		return array_map( array( Trash::class, 'public_row' ), $this->trash->listed( array( 'status' => 'trashed' ) ) );
 	}
 
 	/**

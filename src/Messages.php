@@ -33,6 +33,8 @@ final class Messages {
 			/* translators: %s: item name. */
 			'network'            => __( '%s belongs to the whole network. Only network admins can trash it.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
+			'item_cap'           => __( 'You are not allowed to change %s.', 'axle-leftovers' ),
+			/* translators: %s: item name. */
 			'confirm'            => __( 'Type the name %s to confirm. The owner is not certain.', 'axle-leftovers' ),
 			/* translators: 1: role, 2: user logins. */
 			'role_users'         => __( 'Users still have the role %1$s: %2$s. Change their role first.', 'axle-leftovers' ),

@@ -9,6 +9,7 @@
 namespace AryanX\Axle\Leftovers\Tests\Unit;
 
 use AryanX\Axle\Leftovers\Core;
+use AryanX\Axle\Leftovers\Themes;
 use AryanX\Axle\Leftovers\Tests\FakeWpdb;
 use Brain\Monkey\Functions;
 
@@ -32,6 +33,7 @@ abstract class LeftoversTestCase extends TestCase {
 		$wpdb     = new FakeWpdb();
 		$this->db = $wpdb;
 		Core::flush();
+		Themes::flush();
 
 		Functions\stubs(
 			array(
@@ -63,6 +65,10 @@ abstract class LeftoversTestCase extends TestCase {
 				'wp_next_scheduled'     => false,
 				'wp_schedule_single_event' => true,
 				'get_theme_root'        => WP_CONTENT_DIR . '/themes',
+				'wp_get_themes'         => array(),
+				'get_stylesheet'        => 'twentytwentyfive',
+				'get_template'          => 'twentytwentyfive',
+				'current_user_can'      => true,
 				'number_format_i18n'    => static function ( $number ) {
 					return (string) $number;
 				},

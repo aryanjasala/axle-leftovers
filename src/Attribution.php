@@ -97,6 +97,7 @@ class Attribution {
 		$this->index     = null;
 		$this->installed = null;
 		$this->ledger->flush();
+		Themes::flush();
 	}
 
 	/**
@@ -150,11 +151,118 @@ class Attribution {
 	 *
 	 * @param string $type Item type.
 	 * @param string $name Name.
-	 * @return array{owner: string, owner_name: string, confidence: string, evidence: array<int, array{code: string, text: string}>, in_use: bool, in_use_by: string}
+	 * @return array{owner: string, owner_name: string, confidence: string, evidence: array<int, array{code: string, text: string, when?: string}>, in_use: bool, in_use_by: string}
 	 */
 	public function attribute( string $type, string $name ): array {
-		$index      = $this->index();
 		$installed  = $this->installed();
+		$candidates = array();
+		$stylesheet = Themes::owner_stylesheet( $type, $name );
+		if ( '' !== $stylesheet ) {
+			$candidates[] = $this->theme_candidate( $stylesheet );
+		}
+		if ( ! Themes::is_content_type( $type ) ) {
+			$candidates = array_merge( $candidates, $this->source_candidates( $type, $name ) );
+		}
+
+		$in_use_by = '';
+		foreach ( $candidates as $candidate ) {
+			if ( isset( $installed[ $candidate['owner'] ] ) ) {
+				$in_use_by = $candidate['owner'];
+				break;
+			}
+		}
+		if ( '' === $in_use_by && 0 === strpos( (string) ( $candidates[0]['owner'] ?? '' ), 'mu-plugin:' ) ) {
+			$in_use_by = (string) $candidates[0]['owner'];
+		}
+
+		$lower = strtolower( (string) preg_replace( '/^_(site_)?transient_/', '', self::bare_name( $type, $name ) ) );
+
+		// Ties go to the owner whose slug the name starts with (redirection_logs: Redirection).
+		foreach ( $candidates as $index => $candidate ) {
+			foreach ( self::guess_prefixes( (string) $candidate['owner'] ) as $prefix ) {
+				if ( 'guess' !== $candidate['confidence'] && 0 === strpos( $lower, $prefix ) ) {
+					$candidates[ $index ]['weight'] += 0.5;
+					break;
+				}
+			}
+		}
+
+		usort(
+			$candidates,
+			static function ( array $a, array $b ): int {
+				return array( self::RANK[ $b['confidence'] ], $b['weight'] ) <=> array( self::RANK[ $a['confidence'] ], $a['weight'] );
+			}
+		);
+
+		$best     = $candidates[0] ?? null;
+		$owner    = $best ? (string) $best['owner'] : '';
+		$evidence = array();
+		$listed   = array();
+		foreach ( $candidates as $candidate ) {
+			$signature = $candidate['code'] . '|' . $candidate['detail'];
+			// A guess says nothing once something better names the same owner.
+			if ( $candidate['owner'] !== $owner || isset( $listed[ $signature ] ) || ( 'guess' === $candidate['confidence'] && 'guess' !== (string) ( $best['confidence'] ?? '' ) ) ) {
+				continue;
+			}
+			$listed[ $signature ] = true;
+			$line                 = array(
+				'code' => (string) $candidate['code'],
+				'text' => $this->evidence_text( $candidate ),
+			);
+			if ( ! empty( $candidate['when'] ) ) {
+				// GMT, so a screen can show it as relative time and a script can read it.
+				$line['when'] = (string) $candidate['when'];
+			}
+			$evidence[] = $line;
+		}
+
+		$result = array(
+			'owner'      => $owner,
+			'owner_name' => $this->owner_name( $owner ),
+			'confidence' => $best ? (string) $best['confidence'] : 'unknown',
+			'evidence'   => $evidence,
+			'in_use'     => '' !== $in_use_by,
+			'in_use_by'  => $in_use_by,
+		);
+
+		/**
+		 * Filters the owner, confidence and evidence of an item.
+		 *
+		 * @param array  $result owner, owner_name, confidence (certain, likely, guess, unknown), evidence, in_use, in_use_by.
+		 * @param string $type   Item type.
+		 * @param string $name   Item name.
+		 */
+		$filtered = (array) apply_filters( 'axle_leftovers_owner', $result, $type, $name );
+		if ( isset( $filtered['owner'] ) && is_string( $filtered['owner'] ) ) {
+			$result['owner']      = $filtered['owner'];
+			$result['owner_name'] = isset( $filtered['owner_name'] ) && is_string( $filtered['owner_name'] ) ? $filtered['owner_name'] : $this->owner_name( $filtered['owner'] );
+		}
+		if ( isset( $filtered['confidence'] ) && isset( self::RANK[ $filtered['confidence'] ] ) ) {
+			$result['confidence'] = (string) $filtered['confidence'];
+		}
+		if ( isset( $filtered['evidence'] ) && is_array( $filtered['evidence'] ) ) {
+			$result['evidence'] = array_values( $filtered['evidence'] );
+		}
+		if ( isset( $filtered['in_use'] ) ) {
+			$result['in_use']    = (bool) $filtered['in_use'];
+			$result['in_use_by'] = (string) ( $filtered['in_use_by'] ?? $result['in_use_by'] );
+		}
+		if ( '' === $result['owner'] ) {
+			$result['confidence'] = 'unknown';
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Candidates from the ledger, the code signatures, the dataset, prefix guesses and cached lookups.
+	 *
+	 * @param string $type Item type.
+	 * @param string $name Item name.
+	 * @return array<int, array{owner: string, confidence: string, weight: float|int, code: string, detail: string, when?: string}>
+	 */
+	private function source_candidates( string $type, string $name ): array {
+		$index      = $this->index();
 		$candidates = array();
 		$bare       = self::bare_name( $type, $name );
 		$key        = self::key_for( $type );
@@ -166,7 +274,8 @@ class Attribution {
 				'confidence' => 'certain',
 				'weight'     => 9,
 				'code'       => $seen['evidence'],
-				'detail'     => substr( $seen['first_seen'], 0, 10 ),
+				'detail'     => '',
+				'when'       => $seen['first_seen'],
 			);
 		}
 
@@ -232,87 +341,37 @@ class Attribution {
 			);
 		}
 
-		$in_use_by = '';
-		foreach ( $candidates as $candidate ) {
-			if ( isset( $installed[ $candidate['owner'] ] ) ) {
-				$in_use_by = $candidate['owner'];
-				break;
-			}
-		}
-		if ( '' === $in_use_by && 0 === strpos( (string) ( $candidates[0]['owner'] ?? '' ), 'mu-plugin:' ) ) {
-			$in_use_by = (string) $candidates[0]['owner'];
-		}
+		return $candidates;
+	}
 
-		// Ties go to the owner whose slug the name starts with (redirection_logs: Redirection).
-		foreach ( $candidates as $index => $candidate ) {
-			foreach ( self::guess_prefixes( (string) $candidate['owner'] ) as $prefix ) {
-				if ( 'guess' !== $candidate['confidence'] && 0 === strpos( $lower, $prefix ) ) {
-					$candidates[ $index ]['weight'] += 0.5;
-					break;
-				}
-			}
-		}
-
-		usort(
-			$candidates,
-			static function ( array $a, array $b ): int {
-				return array( self::RANK[ $b['confidence'] ], $b['weight'] ) <=> array( self::RANK[ $a['confidence'] ], $a['weight'] );
-			}
-		);
-
-		$best     = $candidates[0] ?? null;
-		$owner    = $best ? (string) $best['owner'] : '';
-		$evidence = array();
-		$listed   = array();
-		foreach ( $candidates as $candidate ) {
-			$signature = $candidate['code'] . '|' . $candidate['detail'];
-			// A guess says nothing once something better names the same owner.
-			if ( $candidate['owner'] !== $owner || isset( $listed[ $signature ] ) || ( 'guess' === $candidate['confidence'] && 'guess' !== (string) ( $best['confidence'] ?? '' ) ) ) {
-				continue;
-			}
-			$listed[ $signature ] = true;
-			$evidence[]           = array(
-				'code' => (string) $candidate['code'],
-				'text' => $this->evidence_text( $candidate ),
+	/**
+	 * The candidate for an item that belongs to a theme by its name: theme
+	 * settings and theme content. Certain when the theme was seen being deleted.
+	 *
+	 * @param string $stylesheet Theme folder name.
+	 * @return array{owner: string, confidence: string, weight: int, code: string, detail: string, when?: string}
+	 */
+	private function theme_candidate( string $stylesheet ): array {
+		$owner = 'theme:' . $stylesheet;
+		$entry = $this->index()['ledger'][ $owner ] ?? null;
+		if ( $entry && ! empty( $entry['removed'] ) ) {
+			return array(
+				'owner'      => $owner,
+				'confidence' => 'certain',
+				'weight'     => 10,
+				'code'       => 'theme-deleted',
+				'detail'     => '',
+				'when'       => (string) $entry['removed'],
 			);
 		}
 
-		$result = array(
+		return array(
 			'owner'      => $owner,
-			'owner_name' => $this->owner_name( $owner ),
-			'confidence' => $best ? (string) $best['confidence'] : 'unknown',
-			'evidence'   => $evidence,
-			'in_use'     => '' !== $in_use_by,
-			'in_use_by'  => $in_use_by,
+			'confidence' => 'likely',
+			'weight'     => 10,
+			'code'       => 'theme-missing',
+			'detail'     => $stylesheet,
 		);
-
-		/**
-		 * Filters the owner, confidence and evidence of an item.
-		 *
-		 * @param array  $result owner, owner_name, confidence (certain, likely, guess, unknown), evidence, in_use, in_use_by.
-		 * @param string $type   Item type.
-		 * @param string $name   Item name.
-		 */
-		$filtered = (array) apply_filters( 'axle_leftovers_owner', $result, $type, $name );
-		if ( isset( $filtered['owner'] ) && is_string( $filtered['owner'] ) ) {
-			$result['owner']      = $filtered['owner'];
-			$result['owner_name'] = isset( $filtered['owner_name'] ) && is_string( $filtered['owner_name'] ) ? $filtered['owner_name'] : $this->owner_name( $filtered['owner'] );
-		}
-		if ( isset( $filtered['confidence'] ) && isset( self::RANK[ $filtered['confidence'] ] ) ) {
-			$result['confidence'] = (string) $filtered['confidence'];
-		}
-		if ( isset( $filtered['evidence'] ) && is_array( $filtered['evidence'] ) ) {
-			$result['evidence'] = array_values( $filtered['evidence'] );
-		}
-		if ( isset( $filtered['in_use'] ) ) {
-			$result['in_use']    = (bool) $filtered['in_use'];
-			$result['in_use_by'] = (string) ( $filtered['in_use_by'] ?? $result['in_use_by'] );
-		}
-		if ( '' === $result['owner'] ) {
-			$result['confidence'] = 'unknown';
-		}
-
-		return $result;
 	}
 
 	/**
@@ -325,7 +384,11 @@ class Attribution {
 		if ( '' === $owner ) {
 			return '';
 		}
+		$index = $this->index();
 		if ( 0 === strpos( $owner, 'theme:' ) ) {
+			if ( isset( $index['ledger'][ $owner ] ) && '' !== $index['ledger'][ $owner ]['name'] && substr( $owner, 6 ) !== $index['ledger'][ $owner ]['name'] ) {
+				return (string) $index['ledger'][ $owner ]['name'];
+			}
 			/* translators: %s: theme folder. */
 			return sprintf( __( 'Theme %s', 'axle-leftovers' ), substr( $owner, 6 ) );
 		}
@@ -333,7 +396,6 @@ class Attribution {
 			/* translators: %s: must-use plugin file. */
 			return sprintf( __( 'Must-use plugin %s', 'axle-leftovers' ), substr( $owner, 10 ) );
 		}
-		$index = $this->index();
 		if ( isset( $index['ledger'][ $owner ] ) && '' !== $index['ledger'][ $owner ]['name'] ) {
 			return (string) $index['ledger'][ $owner ]['name'];
 		}
@@ -366,7 +428,7 @@ class Attribution {
 		foreach ( array_keys( get_mu_plugins() ) as $file ) {
 			$out[ 'mu-plugin:' . Ledger::slug_for( (string) $file ) ] = 'mu-plugin';
 		}
-		foreach ( array_keys( wp_get_themes() ) as $theme ) {
+		foreach ( array_keys( Themes::installed() ) as $theme ) {
 			$out[ 'theme:' . $theme ] = 'theme';
 		}
 		$out['axle-leftovers'] = 'plugin';
@@ -465,7 +527,7 @@ class Attribution {
 			}
 			if ( ! isset( $guessed[ $slug ] ) ) {
 				$guessed[ $slug ] = true;
-				foreach ( self::guess_prefixes( $slug ) as $prefix ) {
+				foreach ( self::guess_prefixes( 0 === strpos( (string) $slug, 'theme:' ) ? substr( (string) $slug, 6 ) : (string) $slug ) as $prefix ) {
 					$index['guesses'][] = array( $prefix, $slug );
 				}
 			}
@@ -488,14 +550,20 @@ class Attribution {
 
 		switch ( $candidate['code'] ) {
 			case 'activation':
-				/* translators: 1: plugin name, 2: date. */
-				return sprintf( __( 'Created when %1$s was activated on %2$s', 'axle-leftovers' ), $name, $detail );
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Created when %s was activated', 'axle-leftovers' ), $name );
 			case 'runtime':
-				/* translators: 1: plugin name, 2: date. */
-				return sprintf( __( 'Seen being created by %1$s on %2$s', 'axle-leftovers' ), $name, $detail );
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Seen being created by %s', 'axle-leftovers' ), $name );
 			case 'uninstall-diff':
-				/* translators: 1: plugin name, 2: date. */
-				return sprintf( __( 'Removed by %1$s\'s uninstall.php on %2$s, and created again since', 'axle-leftovers' ), $name, $detail );
+				/* translators: %s: plugin name. */
+				return sprintf( __( 'Removed by %s\'s uninstall.php, and created again since', 'axle-leftovers' ), $name );
+			case 'theme-deleted':
+				/* translators: %s: theme name. */
+				return sprintf( __( 'Left by the theme %s, which was deleted', 'axle-leftovers' ), $name );
+			case 'theme-missing':
+				/* translators: %s: theme folder name. */
+				return sprintf( __( 'Named after the theme %s, which is not installed', 'axle-leftovers' ), $detail );
 			case 'signature':
 				/* translators: %s: plugin name. */
 				return sprintf( __( 'Named in %s\'s code', 'axle-leftovers' ), $name );
