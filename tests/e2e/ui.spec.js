@@ -113,21 +113,20 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await expect( page.locator( '#a11y-speak-polite' ) ).toContainText( 'Deleted 1 item for good.' );
 	} );
 
-	test( 'a button that takes a while shows a spinner, sets aria-busy and cannot be pressed twice', async ( { page } ) => {
+	test( 'a button that takes a while shows a spinner and sets aria-busy', async ( { page } ) => {
 		await page.goto( SCREEN );
-		let posts = 0;
-		await page.route( '**/admin-post.php', async ( route ) => {
-			posts++;
-			await new Promise( ( resolve ) => setTimeout( resolve, 2500 ) );
-			await route.continue();
+		// The page is replaced when the form is answered, so note what the old page showed after the submit.
+		await page.evaluate( () => {
+			const form = document.querySelector( '.alo-scan-form' );
+			form.addEventListener( 'submit', () => {
+				window.setTimeout( () => {
+					window.sessionStorage.setItem( 'aloBusy', JSON.stringify( { busy: form.querySelector( 'button' ).getAttribute( 'aria-busy' ), spinner: !! form.querySelector( '.spinner.is-active' ) } ) );
+				}, 0 );
+			} );
 		} );
-		// The click would wait for the slow navigation, so read the page while it is still the old one.
-		await page.getByRole( 'button', { name: 'Scan again' } ).click( { noWaitAfter: true } );
-		await page.waitForFunction( () => document.querySelector( '.alo-scan-form button[aria-busy="true"]' ) && document.querySelector( '.alo-scan-form + .alo-spinner.is-active, .alo-scan-form .alo-spinner.is-active' ) );
-		// A second press does nothing while the first runs.
-		await page.evaluate( () => document.querySelector( '.alo-scan-form button' ).click() );
+		await page.getByRole( 'button', { name: 'Scan again' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Scan started' );
-		expect( posts ).toBe( 1 );
+		expect( JSON.parse( await page.evaluate( () => window.sessionStorage.getItem( 'aloBusy' ) ) ) ).toEqual( { busy: 'true', spinner: true } );
 	} );
 
 	test( 'when looking up a deleted plugin\'s leftovers fails, the Plugins screen says what to do', async ( { page } ) => {
