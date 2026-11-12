@@ -8,7 +8,7 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Find the tables, options, cron events, folders and theme settings that deleted plugins and themes left behind, see who owns each and why, and clean up with undo.
+Find what deleted plugins and themes left behind, see who owns each item and why, and clean it up with undo.
 
 == Description ==
 
