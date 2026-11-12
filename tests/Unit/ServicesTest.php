@@ -13,6 +13,7 @@ use AryanX\Axle\Leftovers\Health\SiteHealth;
 use AryanX\Axle\Leftovers\Privacy;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Trash;
+use Brain\Monkey\Actions;
 use Brain\Monkey\Filters;
 use Brain\Monkey\Functions;
 
@@ -58,7 +59,7 @@ final class ServicesTest extends LeftoversTestCase {
 			},
 			$registered
 		);
-		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
+		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/get-settings', 'axle-leftovers/update-settings', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
 		$this->assertTrue( $annotations['axle-leftovers/list-leftovers']['readonly'] );
 		$this->assertTrue( $annotations['axle-leftovers/trash-items']['destructive'] );
 		$this->assertTrue( $annotations['axle-leftovers/purge-trash']['destructive'] );
@@ -68,6 +69,8 @@ final class ServicesTest extends LeftoversTestCase {
 		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => true ), $annotations['axle-leftovers/lookup-item'] );
 		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => true ), $annotations['axle-leftovers/download-dataset'] );
 		$this->assertSame( array( 'readonly' => false, 'destructive' => true, 'idempotent' => true ), $annotations['axle-leftovers/delete-dataset'] );
+		$this->assertTrue( $annotations['axle-leftovers/get-settings']['readonly'] );
+		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => true ), $annotations['axle-leftovers/update-settings'] );
 
 		Functions\when( 'current_user_can' )->alias(
 			static function ( $cap ) {
@@ -75,6 +78,35 @@ final class ServicesTest extends LeftoversTestCase {
 			}
 		);
 		$this->assertTrue( $registered['axle-leftovers/trash-items']['permission_callback']() );
+	}
+
+	public function test_the_settings_ability_changes_only_what_it_is_given_and_fires_the_action(): void {
+		$this->options['axle_leftovers_settings'] = array( 'retention_days' => 14, 'online_lookup' => false );
+		Functions\when( 'update_option' )->alias(
+			function ( $name, $value ) {
+				$this->options[ $name ] = $value;
+				return true;
+			}
+		);
+		Actions\expectDone( 'axle_leftovers_settings_saved' )->once()->with(
+			\Mockery::on(
+				static function ( $new ) {
+					return 30 === $new['retention_days'] && true === $new['online_lookup'];
+				}
+			),
+			\Mockery::on(
+				static function ( $old ) {
+					return 14 === $old['retention_days'] && false === $old['online_lookup'];
+				}
+			)
+		);
+
+		$result = ( new Abilities( \Mockery::mock( Scanner::class ), \Mockery::mock( Trash::class ) ) )->update_settings( array( 'retention_days' => '30', 'online_lookup' => true, 'unknown' => 1 ) );
+
+		$this->assertSame( 30, $result['retention_days'] );
+		$this->assertTrue( $result['online_lookup'] );
+		$this->assertFalse( $result['keep_exports'], 'Settings that were not passed keep their value.' );
+		$this->assertArrayNotHasKey( 'unknown', $result );
 	}
 
 	public function test_privacy_eraser_purges_batches_with_the_users_meta(): void {

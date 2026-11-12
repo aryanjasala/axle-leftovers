@@ -171,6 +171,81 @@ function makeDatasetLeftovers() {
 	wp( 'option', 'update', 'redirection_options', JSON.stringify( { support: false, monitor_post: 0, expire_redirect: 7 } ), '--format=json', '--autoload=yes' );
 }
 
+/** The theme the site runs with now. */
+function activeTheme() {
+	return wp( 'theme', 'list', '--status=active', '--field=name' ).split( '\n' )[ 0 ];
+}
+
+/** Copies Leftover Theme into the themes folder. */
+function installTheme() {
+	wpEval(
+		`$copy = function ( $from, $to ) use ( &$copy ) { wp_mkdir_p( $to ); foreach ( scandir( $from ) as $f ) { if ( "." === $f[0] ) { continue; } is_dir( "$from/$f" ) ? $copy( "$from/$f", "$to/$f" ) : copy( "$from/$f", "$to/$f" ); } }; $copy( ${ FIXTURES } . "/leftover-theme", get_theme_root() . "/leftover-theme" );`
+	);
+}
+
+/**
+ * Block theme content for a theme folder: two templates and a template part with meta, a revision,
+ * a global styles entry, all tagged with the theme. Returns the IDs by kind.
+ */
+function makeThemeContent( stylesheet, withCss = false ) {
+	return JSON.parse(
+		wpEval(
+			`$t = ${ JSON.stringify( stylesheet ) }; $ids = array( "template" => array(), "globalstyles" => array(), "revisions" => array() );
+			foreach ( array( array( "wp_template", "single", "Single" ), array( "wp_template", "page", "Page" ), array( "wp_template_part", "header", "Header" ) ) as $d ) {
+				$id = wp_insert_post( array( "post_type" => $d[0], "post_name" => $d[1], "post_title" => $d[2], "post_status" => "publish", "post_content" => "<!-- wp:paragraph --><p>" . $d[2] . "</p><!-- /wp:paragraph -->" ) );
+				wp_set_object_terms( $id, $t, "wp_theme" );
+				if ( "wp_template_part" === $d[0] ) { wp_set_object_terms( $id, "header", "wp_template_part_area" ); }
+				update_post_meta( $id, "origin", "theme" );
+				$ids["template"][] = $id;
+			}
+			$rev = wp_insert_post( array( "post_type" => "revision", "post_status" => "inherit", "post_parent" => $ids["template"][0], "post_name" => $ids["template"][0] . "-revision-v1", "post_title" => "Single", "post_content" => "older" ) );
+			$ids["revisions"][] = $rev;
+			$g = wp_insert_post( array( "post_type" => "wp_global_styles", "post_name" => "wp-global-styles-" . $t, "post_title" => "Custom Styles", "post_status" => "publish", "post_content" => "{\\"version\\":3,\\"isGlobalStylesUserThemeJSON\\":true}" ) );
+			wp_set_object_terms( $g, $t, "wp_theme" );
+			$ids["globalstyles"][] = $g;
+			echo wp_json_encode( $ids );`
+		)
+	);
+}
+
+/** Installs Leftover Theme, lets it create its data, switches back and deletes it. Returns the block content IDs. */
+function makeThemeLeftovers() {
+	const original = activeTheme();
+	ensurePosts();
+	installTheme();
+	wp( 'theme', 'activate', 'leftover-theme' );
+	wp( 'option', 'get', 'lt_version' ); // Any request runs the theme's first-run code.
+	const ids = makeThemeContent( 'leftover-theme' );
+	wp( 'theme', 'activate', original );
+	wp( 'theme', 'delete', 'leftover-theme' );
+	wp( 'axle-leftovers', 'scan' );
+	return ids;
+}
+
+/** Puts the site back after the theme specs: the original theme, no fixture theme, none of its data. */
+function resetThemes() {
+	const names = wp( 'theme', 'list', '--field=name' ).split( '\n' );
+	if ( names.includes( 'leftover-theme' ) ) {
+		const active = activeTheme();
+		if ( 'leftover-theme' === active ) {
+			const other = names.find( ( name ) => 'leftover-theme' !== name );
+			wp( 'theme', 'activate', other );
+		}
+		succeeds( 'theme', 'delete', 'leftover-theme' );
+	}
+	wpEval( '$b = get_theme_root() . "/leftover-theme"; if ( is_dir( $b ) ) { $it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $b, FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST ); foreach ( $it as $f ) { $f->isDir() ? rmdir( $f->getPathname() ) : unlink( $f->getPathname() ); } rmdir( $b ); }' );
+	for ( const option of [ 'lt_settings', 'lt_version', 'lt_cache', '_transient_lt_feed', '_transient_timeout_lt_feed', 'theme_mods_leftover-theme', 'theme_mods_ghost-theme' ] ) {
+		succeeds( 'option', 'delete', option );
+	}
+	succeeds( 'cron', 'event', 'unschedule', 'lt_refresh' );
+	wpEval(
+		'wp_unschedule_hook( "lt_refresh" ); delete_post_meta_by_key( "_lt_layout" ); global $wpdb;' +
+			'$ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type IN ( \'wp_template\', \'wp_template_part\', \'wp_global_styles\', \'custom_css\' ) OR ( post_type = \'revision\' AND post_name LIKE \'%-revision-v1\' AND post_content = \'older\' )" );' +
+			'foreach ( $ids as $id ) { $wpdb->delete( $wpdb->postmeta, array( "post_id" => $id ) ); $wpdb->delete( $wpdb->term_relationships, array( "object_id" => $id ) ); $wpdb->delete( $wpdb->posts, array( "ID" => $id ) ); }' +
+			'foreach ( array( "wp_theme" ) as $tax ) { foreach ( get_terms( array( "taxonomy" => $tax, "hide_empty" => false ) ) as $term ) { if ( in_array( $term->name, array( "leftover-theme", "ghost-theme" ), true ) ) { wp_delete_term( $term->term_id, $tax ); } } }'
+	);
+}
+
 /** Everything the screenshots and the demo show. */
 function seedScreens() {
 	resetAll();
@@ -203,6 +278,11 @@ module.exports = {
 	makeUnknownTable,
 	makeDatasetLeftovers,
 	seedScreens,
+	activeTheme,
+	installTheme,
+	makeThemeContent,
+	makeThemeLeftovers,
+	resetThemes,
 	tables,
 	checksum,
 	query,

@@ -8,11 +8,11 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Find the tables, options, cron events and folders deleted plugins left behind, see who owns each and why, and clean up with undo.
+Find the tables, options, cron events, folders and theme settings that deleted plugins and themes left behind, see who owns each and why, and clean up with undo.
 
 == Description ==
 
-Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none, or skip their tables, cron events, roles, uploads folders and meta. Years later the site has tables nobody can name, autoloaded options from plugins nobody remembers, cron events firing into nothing, and roles in the user editor that do nothing.
+Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none, or skip their tables, cron events, roles, uploads folders and meta. Themes do the same: after five themes, `wp_options` still carries the settings of all of them, and block themes leave the templates and styles you saved. Years later the site has tables nobody can name, autoloaded options from plugins nobody remembers, cron events firing into nothing, and roles in the user editor that do nothing.
 
 Cleaners show these, but they guess the owner or charge for it, and every delete is permanent. So careful admins never clean.
 
@@ -26,12 +26,12 @@ Part of Axle by AryanX, a family of plugins for running WordPress sites safely.
 
 WordPress does not record which plugin created a table, option or cron event. Leftovers combines four sources and shows each one:
 
-* **Certain**: Leftovers saw the plugin create it. Around every plugin activation it compares what exists before and after, and while it runs it records who creates new tables, options, cron events, roles, capabilities and meta keys.
-* **Likely**: the name is in the plugin's code. Leftovers reads each plugin's PHP once and keeps the names it uses, even after the plugin is deleted, also over FTP. A bundled list covers about 500 of the most installed plugins on WordPress.org, for plugins deleted before Leftovers was installed. If you allow it, you can download a full list of about 10,000 plugins, rebuilt every month.
+* **Certain**: Leftovers saw the plugin or theme create it, or saw the theme being deleted. Around every plugin activation it compares what exists before and after, and while it runs it records who creates new tables, options, cron events, roles, capabilities and meta keys.
+* **Likely**: the name is in the code of the plugin or theme. Leftovers reads each plugin's and theme's PHP once and keeps the names it uses, even after it is deleted, also over FTP. A bundled list covers about 500 of the most installed plugins on WordPress.org, for plugins deleted before Leftovers was installed. If you allow it, you can download a full list of about 10,000 plugins, rebuilt every month.
 * **Guess**: the name starts like a plugin's slug. Never enough on its own: you have to type the name to trash it.
 * **Unknown**: nothing points anywhere. You have to type the name too.
 
-Data of an installed plugin, active or not, is never listed. Core tables, options, cron events, roles, capabilities and meta keys are never listed.
+Data of an installed plugin or theme, active or not, is never listed. Core tables, options, cron events, roles, capabilities and meta keys are never listed.
 
 = Safe to clean =
 
@@ -47,18 +47,21 @@ Data of an installed plugin, active or not, is never listed. Core tables, option
 
 Tables, options and transients, cron events, post, user, term and comment meta keys, top-level uploads folders, roles, and capabilities on roles. Each item shows rows, size and whether it is autoloaded, so you see what a deleted plugin still costs every page load.
 
+For a deleted theme: its Customizer settings, its options, transients, cron events and meta keys, and on block themes the templates, template parts, global styles and custom CSS you saved. They are listed under the theme's name, with the same evidence, the same trash and the same restore. Nothing of the active theme, its parent or any installed theme is ever listed. Widgets that a theme switch left inactive are only reported.
+
 On multisite, each site lists its own leftovers. Network options, user meta and the main site's tables are listed in Network Admin.
 
 = WP-CLI =
 
-* `wp axle-leftovers list [--plugin=] [--type=] [--confidence=] [--format=]`
+* `wp axle-leftovers list [--plugin=] [--theme=] [--kind=] [--type=] [--confidence=] [--format=]`
 * `wp axle-leftovers show <type> <name>`
 * `wp axle-leftovers scan [--rescan-signatures]`
 * `wp axle-leftovers export <type> <name>... [--output=]`
-* `wp axle-leftovers trash <type> <name>... [--plugin=<slug>] [--yes]`
+* `wp axle-leftovers trash <type> <name>... [--plugin=<slug>] [--theme=<folder>] [--yes]`
 * `wp axle-leftovers restore <batch-id|item-id>`
 * `wp axle-leftovers trash list` and `wp axle-leftovers trash purge [--older-than=<days>] [--yes]`
 * `wp axle-leftovers ledger list` and `wp axle-leftovers ledger show <slug>`
+* `wp axle-leftovers settings [list|get <key>|set <key> <value>]`
 
 = For developers =
 
@@ -80,7 +83,11 @@ Each item shows its evidence, and Guess and Unknown items need the name typed be
 
 = What happens when I uninstall Leftovers? =
 
-Its own tables, settings and folder are removed. Items still in its trash are purged first, because their data lives in that folder and those tables. Deactivating shows a warning with Restore all and Empty trash while the trash is not empty. The `axle_leftovers_uninstall_trash_policy` filter can switch uninstall to restoring instead.
+Its own tables, settings and folder are removed. Items still in its trash are purged first, because their data lives in that folder and those tables. The Plugins screen shows a warning under the plugin while the trash is not empty, and deactivating asks first, with a Restore all button. The `axle_leftovers_uninstall_trash_policy` filter can switch uninstall to restoring instead.
+
+= Does it clean up after themes too? =
+
+Yes. When you switch or delete a theme, Leftovers reads its code and records it. What a deleted theme leaves is listed under its name: the `theme_mods_` option, options and transients its code used, cron events, meta keys, and on block themes the templates, template parts, global styles and custom CSS. Trashing them exports every post with its revisions, meta and term relationships, and restoring puts the same rows back with the same IDs. Widgets that are inactive after a theme switch are only reported, and never moved.
 
 = Does it send anything anywhere? =
 
@@ -100,11 +107,12 @@ It has `.htaccess` and `web.config` deny rules, which nginx ignores. The file na
 
 == Screenshots ==
 
-1. By plugin: what a deleted plugin left, with the evidence, sizes, the autoload cost and the reference check.
+1. By owner: what a deleted plugin or theme left, with the evidence, sizes, the autoload cost and the reference check.
 2. Moving an Unknown table to the trash needs its name typed.
 3. The trash: one batch, each item's export, and Restore.
 4. The ledger: every plugin seen, how it was removed, and the names its code uses.
 5. The notice on the Plugins screen after a delete.
+6. A deleted theme: its settings, options, templates and styles, listed under its name.
 
 == External services ==
 

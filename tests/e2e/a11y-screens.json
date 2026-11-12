@@ -4,13 +4,20 @@
   "exclude": [],
   "screens": [
     {
-      "name": "By plugin, nothing left",
-      "setup": [{ "js": "seed.js", "call": "installHelpers" }, { "js": "seed.js", "call": "resetAll" }],
+      "name": "By owner, nothing left, with the Get started card",
+      "setup": [{ "js": "seed.js", "call": "installHelpers" }, { "js": "seed.js", "call": "resetAll" }, { "wp": ["user", "meta", "delete", "1", "axle_leftovers_steps_dismissed"], "mayFail": true }],
       "url": "/wp-admin/tools.php?page=axle-leftovers",
-      "steps": [{ "waitFor": ".alo-empty" }]
+      "steps": [{ "waitFor": ".alo-empty" }, { "waitFor": ".alo-steps .axle-step" }]
     },
     {
-      "name": "By plugin with a card open, Certain items and a reference block",
+      "name": "By owner, nothing left, Get started card hidden",
+      "setup": [{ "js": "seed.js", "call": "resetAll" }, { "wp": ["user", "meta", "update", "1", "axle_leftovers_steps_dismissed", "1"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "waitFor": ".alo-empty" }],
+      "cleanup": [{ "wp": ["user", "meta", "delete", "1", "axle_leftovers_steps_dismissed"] }]
+    },
+    {
+      "name": "By owner with a card open, Certain items and a reference block",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "js": "seed.js", "call": "installConsumer" }, { "wp": ["axle-leftovers", "scan"] }],
       "url": "/wp-admin/tools.php?page=axle-leftovers",
       "steps": [{ "click": ".alo-review summary" }, { "waitFor": ".alo-items" }],
@@ -36,7 +43,7 @@
       "steps": [
         { "click": "tr[data-item=\"table:wp_mystery_log\"] input[type=\"checkbox\"]" },
         { "click": ".alo-trash-button" },
-        { "waitFor": "#alo-confirm[open]" },
+        { "waitFor": "#alo-confirm" },
         { "click": ".alo-confirm-ok" },
         { "waitFor": ".alo-confirm-error:not(:empty)" }
       ],
@@ -82,7 +89,7 @@
       "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
     },
     {
-      "name": "By plugin with an owner found by a lookup, candidates listed",
+      "name": "By owner with an owner found by a lookup, candidates listed",
       "setup": [{ "js": "seed.js", "call": "makeLookupItems" }, { "wp": ["axle-leftovers", "lookup", "option", "lmx_shared_setting"] }],
       "url": "/wp-admin/tools.php?page=axle-leftovers",
       "steps": [{ "click": ".alo-card[data-owner=\"big-widgets\"] .alo-review summary" }, { "waitFor": ".alo-candidates" }],
@@ -96,6 +103,82 @@
       "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
     },
     {
+      "name": "By owner with a deleted theme's card open, templates, styles and custom CSS",
+      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }, { "js": "seed.js", "call": "makeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "click": ".alo-card[data-owner=\"theme:leftover-theme\"] .alo-review summary" }, { "waitFor": ".alo-card[data-owner=\"theme:leftover-theme\"] .alo-items" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "By owner filtered to themes",
+      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }, { "js": "seed.js", "call": "makeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&kind=theme",
+      "steps": [{ "waitFor": ".alo-kinds" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "In-place confirm to trash theme leftovers",
+      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [
+        { "click": ".alo-card .alo-review summary" },
+        { "click": ".alo-card .alo-check-all" },
+        { "click": ".alo-card .alo-trash-button" },
+        { "waitFor": "#alo-confirm" }
+      ],
+      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "In-place confirm to delete a batch for good (danger)",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "cron", "lm_cleanup", "--yes"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=trash",
+      "steps": [{ "click": ".alo-purge-batch" }, { "waitFor": "#alo-confirm.axle-confirm--danger" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Notice after a trash, with Undo",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [
+        { "click": ".alo-card[data-owner=\"leftover-maker\"] .alo-review summary" },
+        { "click": ".alo-card[data-owner=\"leftover-maker\"] tr[data-item=\"option:lm_flags\"] input[type=\"checkbox\"]" },
+        { "click": ".alo-card[data-owner=\"leftover-maker\"] .alo-trash-button" },
+        { "click": "#alo-confirm .alo-confirm-ok" },
+        { "waitFor": ".alo-notice .alo-undo" }
+      ],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "By owner with a note about inactive widgets",
+      "setup": [{ "js": "seed.js", "call": "resetAll" }, { "wp": ["option", "update", "sidebars_widgets", "{\"wp_inactive_widgets\":[\"search-2\",\"meta-2\"],\"array_version\":3}", "--format=json"] }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "waitFor": ".alo-widgets-note" }],
+      "cleanup": [{ "wp": ["option", "update", "sidebars_widgets", "{\"wp_inactive_widgets\":[],\"array_version\":3}", "--format=json"] }]
+    },
+    {
+      "name": "Ledger with a deleted theme",
+      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=ledger",
+      "steps": [{ "waitFor": ".alo-ledger tr[data-slug=\"theme:leftover-theme\"]" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Plugins screen: the warning under the plugin while the trash holds items",
+      "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "cron", "lm_cleanup", "--yes"] }],
+      "url": "/wp-admin/plugins.php",
+      "steps": [{ "waitFor": ".alo-trash-warning" }],
+      "include": [".alo-trash-warning"],
+      "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "Themes screen: the notice after a delete",
+      "setup": [{ "js": "seed.js", "call": "makeThemeLeftovers" }, { "wp": ["eval", "set_transient( 'axle_leftovers_deleted_1', array( 'theme:leftover-theme' ), 3600 );"] }],
+      "url": "/wp-admin/themes.php",
+      "steps": [{ "waitFor": ".alo-deleted-notice" }],
+      "include": [".alo-deleted-notice"],
+      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
       "name": "Plugins screen: the notice after a delete",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["eval", "set_transient( 'axle_leftovers_deleted_1', array( 'leftover-maker' ), 3600 );"] }],
       "url": "/wp-admin/plugins.php",
@@ -107,7 +190,7 @@
       "name": "Plugins screen: the deactivation warning",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "cron", "lm_cleanup", "--yes"] }],
       "url": "/wp-admin/plugins.php",
-      "steps": [{ "click": "tr[data-plugin=\"axle-leftovers/axle-leftovers.php\"] .deactivate a" }, { "waitFor": "#alo-deactivate[open]" }],
+      "steps": [{ "click": "tr[data-plugin=\"axle-leftovers/axle-leftovers.php\"] .deactivate a" }, { "waitFor": "#alo-deactivate" }],
       "include": ["#alo-deactivate"],
       "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
     }

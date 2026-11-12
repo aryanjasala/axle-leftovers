@@ -397,6 +397,61 @@ final class Abilities implements Service {
 			)
 		);
 
+		$settings_schema = array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'retention_days'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 3650,
+				),
+				'export_max_mb'   => array(
+					'type'    => 'integer',
+					'minimum' => 0,
+				),
+				'keep_exports'    => array( 'type' => 'boolean' ),
+				'runtime_ledger'  => array( 'type' => 'boolean' ),
+				'track_meta_keys' => array( 'type' => 'boolean' ),
+				'online_lookup'   => array( 'type' => 'boolean' ),
+				'remote_dataset'  => array( 'type' => 'boolean' ),
+			),
+			'additionalProperties' => false,
+		);
+
+		$this->ability(
+			'get-settings',
+			__( 'Get the settings', 'axle-leftovers' ),
+			__( 'How long the trash keeps items, what is recorded, and whether the online lookup and the full list download are allowed.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			$settings_schema,
+			array( $this, 'get_settings' ),
+			$permission,
+			array(
+				'readonly'   => true,
+				'idempotent' => true,
+			)
+		);
+
+		$this->ability(
+			'update-settings',
+			__( 'Change the settings', 'axle-leftovers' ),
+			__( 'Changes the settings you pass and keeps the rest. Turning on online_lookup or remote_dataset allows the external services described in the readme. Safe to repeat.', 'axle-leftovers' ),
+			array_merge( $settings_schema, array( 'minProperties' => 1 ) ),
+			$settings_schema,
+			array( $this, 'update_settings' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			)
+		);
+
 		$this->ability(
 			'download-dataset',
 			__( 'Download the full signature list', 'axle-leftovers' ),
@@ -447,6 +502,31 @@ final class Abilities implements Service {
 				'idempotent'  => true,
 			)
 		);
+	}
+
+	/**
+	 * The settings.
+	 *
+	 * @return array
+	 */
+	public function get_settings(): array {
+		return Settings::all();
+	}
+
+	/**
+	 * Changes the settings that were passed.
+	 *
+	 * @param array $input Settings to change.
+	 * @return array The settings now.
+	 */
+	public function update_settings( $input ): array {
+		$settings = Settings::all();
+		foreach ( array_intersect_key( (array) $input, $settings ) as $key => $value ) {
+			$settings[ $key ] = is_bool( $settings[ $key ] ) ? (bool) $value : (int) $value;
+		}
+		Settings::save( $settings );
+
+		return Settings::all();
 	}
 
 	/**

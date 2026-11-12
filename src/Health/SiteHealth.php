@@ -15,7 +15,7 @@ use AryanX\Axle\Leftovers\Service;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * One test under Tools > Site Health: leftovers of deleted plugins that are
+ * One test under Tools > Site Health: leftovers of deleted plugins and themes that are
  * autoloaded on every request, from the last scan's cached results.
  */
 final class SiteHealth implements Service {
@@ -57,7 +57,7 @@ final class SiteHealth implements Service {
 	public function add_tests( $tests ): array {
 		$tests                                      = (array) $tests;
 		$tests['direct']['axle_leftovers_autoload'] = array(
-			'label' => __( 'Deleted plugins leave little autoloaded data', 'axle-leftovers' ),
+			'label' => __( 'Deleted plugins and themes leave little autoloaded data', 'axle-leftovers' ),
 			'test'  => array( $this, 'test_autoload' ),
 		);
 
@@ -85,23 +85,23 @@ final class SiteHealth implements Service {
 		}
 
 		$result = array(
-			'label'       => __( 'Deleted plugins leave little autoloaded data', 'axle-leftovers' ),
+			'label'       => __( 'Deleted plugins and themes leave little autoloaded data', 'axle-leftovers' ),
 			'status'      => 'good',
 			'badge'       => array(
 				'label' => __( 'Performance', 'axle-leftovers' ),
 				'color' => 'blue',
 			),
-			'description' => '<p>' . esc_html__( 'Options left by deleted plugins add little or nothing to every page load.', 'axle-leftovers' ) . '</p>',
+			'description' => '<p>' . esc_html__( 'Options left by deleted plugins and themes add little or nothing to every page load.', 'axle-leftovers' ) . '</p>',
 			'actions'     => '',
 			'test'        => 'axle_leftovers_autoload',
 		);
 
 		if ( $bytes > self::THRESHOLD ) {
 			/* translators: 1: number of options, 2: size. */
-			$result['label']          = sprintf( _n( '%1$d option left by a deleted plugin adds %2$s to every page load', '%1$d options left by deleted plugins add %2$s to every page load', $count, 'axle-leftovers' ), $count, Display::size( $bytes ) );
+			$result['label']          = sprintf( _n( '%1$d option left by a deleted plugin or theme adds %2$s to every page load', '%1$d options left by deleted plugins and themes add %2$s to every page load', $count, 'axle-leftovers' ), $count, Display::size( $bytes ) );
 			$result['status']         = 'recommended';
 			$result['badge']['color'] = 'orange';
-			$result['description']    = '<p>' . esc_html__( 'WordPress loads every autoloaded option on every request. Options from plugins that are gone only slow the site down.', 'axle-leftovers' ) . '</p>';
+			$result['description']    = '<p>' . esc_html__( 'WordPress loads every autoloaded option on every request. Options from plugins and themes that are gone only slow the site down.', 'axle-leftovers' ) . '</p>';
 			$result['actions']        = '<p><a href="' . esc_url( Page::url() ) . '">' . esc_html__( 'Review them in Tools > Leftovers', 'axle-leftovers' ) . '</a></p>';
 		}
 

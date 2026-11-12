@@ -63,7 +63,17 @@ final class Settings {
 	 * @param array $input Raw values.
 	 */
 	public static function save( array $input ): void {
-		update_option( self::OPTION, self::sanitize( $input ), true );
+		$old = self::all();
+		$new = self::sanitize( $input );
+		update_option( self::OPTION, $new, true );
+
+		/**
+		 * Fires after the settings are saved, from the screen, WP-CLI or an ability.
+		 *
+		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset.
+		 * @param array $old The settings before.
+		 */
+		do_action( 'axle_leftovers_settings_saved', $new, $old );
 	}
 
 	/**

@@ -12,6 +12,11 @@
 | `role` | Role | Definition exported, role removed; refused while users have it | Re-added |
 | `cap` | Capability on roles | Roles and grants exported, capability removed from each | Re-added |
 | `sitemeta` | Network option (multisite) | Like options | Like options |
+| `template` | Theme folder name; every user template and template part tagged with the theme in `wp_theme` | Posts, their revisions, meta and term relationships exported to JSON lines, then deleted in batches | Re-inserted with their IDs, meta IDs and relationships; refused when any post ID exists again |
+| `globalstyles` | Theme folder name; the global styles entry of the theme | Like `template` | Like `template` |
+| `customcss` | Theme folder name; the Additional CSS post of the theme | Like `template` | Like `template` |
+
+Theme settings are the option `theme_mods_<folder>`. They are core's own while the theme is installed, and a leftover once it is not. Theme content is named by the theme folder and counts the posts behind it. A name that active code mentions does not block theme content, because the folder name appears in code for other reasons.
 
 Names only ever come from the scan results, are checked against the live site, and reach SQL through `%i` placeholders. Folders are confined to the uploads folder and links are never followed.
 
@@ -19,12 +24,18 @@ Names only ever come from the scan results, are checked against the live site, a
 
 | Confidence | Source | Evidence shown |
 | --- | --- | --- |
-| Certain | First-seen ledger: snapshots around activation, runtime hooks (`added_option`, `dbdelta_create_queries`, `query`, `schedule_event`, role changes, `added_{type}_meta`) with a backtrace for new names only | "Created when Acme was activated on 2025-04-02", "Seen being created by Acme on ..." |
-| Likely | The plugin's code signature in the ledger, or the bundled dataset | "Named in Acme's code", "Named in Acme's uninstall.php", "Starts with acme_, a prefix in Acme's code", "Dataset match: ..." |
+| Certain | A theme seen being deleted: its settings and content ("Left by the theme Old Theme, which was deleted"). First-seen ledger: snapshots around activation, runtime hooks (`added_option`, `dbdelta_create_queries`, `query`, `schedule_event`, role changes, `added_{type}_meta`) with a backtrace for new names only | "Created when Acme was activated on 2025-04-02", "Seen being created by Acme on ..." |
+| Likely | A theme folder that is not installed and was never seen being deleted ("Named after the theme x, which is not installed"). The plugin's or theme's code signature in the ledger, or the bundled dataset | "Named in Acme's code", "Named in Acme's uninstall.php", "Starts with acme_, a prefix in Acme's code", "Dataset match: ..." |
 | Guess | The name starts like a known slug (`contact_form_7_`, initials such as `cf_`) | "Prefix guess: starts with ..." |
 | Unknown | Nothing | |
 
-An item that any installed plugin (active or not), must-use plugin or theme may own is in use and never listed. A cron hook with a callback registered right now is in use too. Guess and Unknown items need their names typed to move.
+An item that any installed plugin (active or not), must-use plugin or theme may own is in use and never listed. Themes count as installed when they sit in the themes folder, even with a broken `style.css`, and the active theme and its parent always count.
+
+### Themes
+
+Leftovers reads a theme's PHP at every switch (the theme left and the theme switched to), before a delete, and in the scan, with the same `Signature` scanner it uses for plugins. Themes sit in the ledger as `theme:<folder>`, with the code signature kept after the files are gone. Options, transients, cron events and meta keys the theme's code named are attributed like a plugin's, and the runtime ledger records new ones created by theme code as Certain. A theme removed outside WordPress is recorded when the folder is found missing.
+
+Widgets in `wp_inactive_widgets` or an `orphaned_widgets_*` sidebar are counted and shown as a note. They are never listed as items and never moved. A cron hook with a callback registered right now is in use too. Guess and Unknown items need their names typed to move.
 
 The reference check searches the PHP of active plugins, the active theme and its parent, must-use plugins and drop-ins for the name as a quoted literal (and `}name` for tables). A hit blocks the trash and names the file.
 
@@ -58,9 +69,12 @@ For an Unknown item (or a Guess), Look it up sends one private search with the i
 | `axle_leftovers_core_items` | `array $items` | type => core names never listed |
 | `axle_leftovers_protected_items` | `array $items` | the plugin's own tables, options, cron hooks and folder |
 | `axle_leftovers_item_types` | `array $types` | type => label; remove a type to skip it |
+| `axle_leftovers_protected_themes` | `string[] $stylesheets` | installed theme folders, the active theme and its parent; add folders to treat more themes as installed |
+| `axle_leftovers_item_capability` | `string $cap, string $type` | `edit_theme_options` for `template` and `globalstyles`, `edit_css` for `customcss`, `promote_users` for `role` and `cap`, `edit_users` for `usermeta`, otherwise the plugin's capability; checked on top of it |
+| `axle_leftovers_post_batch_size` | `int $size` | 500 (10 to 5000) posts per query for theme content |
 | `axle_leftovers_owner` | `array $result, string $type, string $name` | owner, owner_name, confidence, evidence, in_use, in_use_by |
 | `axle_leftovers_confidence_levels` | `array $levels` | certain, likely, guess, unknown labels |
-| `axle_leftovers_signature` | `array $signature, string $slug, string $version` | names the plugin's code uses |
+| `axle_leftovers_signature` | `array $signature, string $slug, string $version` | names the plugin's or theme's code uses (`$slug` is `theme:<folder>` for a theme) |
 | `axle_leftovers_dataset` | `array $plugins` | the bundled list merged with the downloaded full list |
 | `axle_leftovers_lookup_enabled` | `bool $enabled` | true; the setting must be on too, so a filter can only turn the lookup off |
 | `axle_leftovers_lookup_endpoint` | `string $endpoint` | `https://veloria.dev/api/v1/search/` (HTTPS only) |
@@ -83,7 +97,7 @@ For an Unknown item (or a Guess), Look it up sends one private search with the i
 | `axle_leftovers_can_trash` | `bool\|WP_Error $allowed, array $item` | true; runs after the safety checks, which still apply |
 | `axle_leftovers_require_typed_confirmation` | `bool $required, string $confidence` | true for guess and unknown (cannot be turned off for those) |
 | `axle_leftovers_uninstall_trash_policy` | `string $policy` | `purge`, or `restore` |
-| `axle_leftovers_notice_message` | `string $message, string $slug, array $counts` | "Acme left 2 tables and 12 options." |
+| `axle_leftovers_notice_message` | `string $message, string $slug, array $counts` | "Acme left 2 tables and 12 options." or "Old Theme left 1 option and 14 template changes." (`$slug` is `theme:<folder>` for a theme) |
 | `axle_leftovers_track_meta_keys` | `bool $track, string $meta_type` | true, from Settings |
 | `axle_leftovers_messages` | `array $messages` | every refusal and error; a template must keep its placeholders |
 
@@ -102,7 +116,10 @@ add_filter( 'axle_leftovers_can_trash', function ( $allowed, $item ) {
 | `axle_leftovers_scan_started` | `bool $rescan_signatures` |
 | `axle_leftovers_scan_finished` | `array[] $items` |
 | `axle_leftovers_plugin_recorded` | `array $entry, bool $is_new` |
-| `axle_leftovers_plugin_removed` | `array $entry, string $how` (admin, cli, outside) |
+| `axle_leftovers_plugin_removed` | `array $entry, string $how` (admin, cli, outside); also for themes, with `theme:<folder>` as the slug |
+| `axle_leftovers_theme_switched` | `string $new, string $old` (theme folders) |
+| `axle_leftovers_theme_removed` | `string $stylesheet, array\|null $entry` (a theme deleted from wp-admin or WP-CLI) |
+| `axle_leftovers_settings_saved` | `array $new, array $old` |
 | `axle_leftovers_item_first_seen` | `string $type, string $name, string $owner, string $evidence` |
 | `axle_leftovers_exported` | `string $batch, string $file, array $item` |
 | `axle_leftovers_before_trash` | `array[] $items, string $batch` |
@@ -147,7 +164,7 @@ $who = \AryanX\Axle\Leftovers\owner_of( 'option', 'acme_settings' );
 
 | Ability | Annotations | Input |
 | --- | --- | --- |
-| `axle-leftovers/list-leftovers` | readonly | `plugin`, `type`, `confidence` |
+| `axle-leftovers/list-leftovers` | readonly | `plugin`, `theme`, `kind` (plugin, theme, mu-plugin), `type`, `confidence` |
 | `axle-leftovers/get-item` | readonly | `type`, `name` |
 | `axle-leftovers/list-trash` | readonly | |
 | `axle-leftovers/trash-items` | destructive | `items` (type, name), `confirm_names` |
@@ -155,29 +172,32 @@ $who = \AryanX\Axle\Leftovers\owner_of( 'option', 'acme_settings' );
 | `axle-leftovers/purge-trash` | destructive, idempotent | `older_than`, `batch` |
 | `axle-leftovers/rescan` | not readonly | `rescan_signatures` |
 | `axle-leftovers/lookup-item` | not readonly, idempotent | `type`, `name`, `refresh` |
+| `axle-leftovers/get-settings` | readonly | |
+| `axle-leftovers/update-settings` | not readonly, idempotent | any of the settings |
 | `axle-leftovers/download-dataset` | not readonly, idempotent | |
 | `axle-leftovers/delete-dataset` | destructive, idempotent | |
 
-Permission: the `axle_leftovers_capability` capability.
+Permission: the `axle_leftovers_capability` capability, plus the capability of each item's type (see `axle_leftovers_item_capability`) and the network capability for network items. A user without them does not see those items and cannot trash or restore them. Items carry `owner_kind` (plugin, theme or mu-plugin).
 
 ## REST
 
-`axle-leftovers/v1`: `GET /items`, `GET /trash`, `POST /trash` (`items`, `confirm_names`), `DELETE /trash` (`older_than`, `batch`), `POST /restore` (`batch`, `items`), `POST /scan`, `GET /notice`. Same capability.
+`axle-leftovers/v1`: `GET /items` (`plugin`, `theme`, `kind`, `type`, `confidence`), `GET /trash`, `POST /trash` (`items`, `confirm_names`), `DELETE /trash` (`older_than`, `batch`), `POST /restore` (`batch`, `items`), `POST /scan`, `GET /notice`. Same capability.
 
 ## WP-CLI
 
 | Command | What it does |
 | --- | --- |
-| `wp axle-leftovers list [--plugin=] [--type=] [--confidence=] [--format=]` | Listed leftovers; `--plugin=` (empty) for unknown items |
+| `wp axle-leftovers list [--plugin=] [--theme=] [--kind=] [--type=] [--confidence=] [--format=]` | Listed leftovers; `--plugin=` (empty) for unknown items, `--theme=<folder>` for one deleted theme, `--kind=plugin\|theme` |
 | `wp axle-leftovers show <type> <name> [--format=]` | One item with its evidence |
 | `wp axle-leftovers scan [--rescan-signatures]` | Scan now |
 | `wp axle-leftovers export <type> <name>... [--output=]` | Export without trashing |
-| `wp axle-leftovers trash <type> <name>... [--plugin=<slug>] [--yes]` | Move to the trash; typed names confirm Guess and Unknown items |
+| `wp axle-leftovers trash <type> <name>... [--plugin=<slug>] [--theme=<folder>] [--yes]` | Move to the trash; typed names confirm Guess and Unknown items; `--theme=` moves everything a deleted theme left |
 | `wp axle-leftovers restore <batch-id\|item-id>` | Restore a batch or one item |
 | `wp axle-leftovers trash list [--format=]` | The trash |
 | `wp axle-leftovers trash purge [--older-than=<days>] [--yes]` | Delete for good |
 | `wp axle-leftovers ledger list [--format=]` / `ledger show <slug>` | Plugins seen |
 | `wp axle-leftovers lookup <type> <name> [--refresh] [--format=]` | Online lookup of an Unknown item (needs the setting) |
+| `wp axle-leftovers settings [list\|get <key>\|set <key> <value>]` | The settings |
 | `wp axle-leftovers dataset download\|status\|delete` | The full signature list (download needs the setting) |
 
 ## Site Health
@@ -186,18 +206,23 @@ Permission: the `axle_leftovers_capability` capability.
 
 ## Data and privacy
 
-- Table `{prefix}axle_leftovers_ledger`: plugins seen, their version, removal, sources and code signature.
+- Table `{prefix}axle_leftovers_ledger`: plugins and themes (as `theme:<folder>`) seen, their version, removal, sources and code signature.
 - Table `{prefix}axle_leftovers_seen`: item type, name, owner, first seen, evidence. One row per distinct name.
 - Table `{prefix}axle_leftovers_trash`: one row per trashed item: batch, type, name, owner, confidence, payload, locations, size, export, user, dates, status.
 - Options `axle_leftovers_settings`, `axle_leftovers_scan` (cached results, not autoloaded), `axle_leftovers_lookups` (cached online lookups, not autoloaded), `axle_leftovers_dataset_meta` (date and count of the downloaded list, not autoloaded), `axle_leftovers_db_version`.
+- User meta `axle_leftovers_steps_dismissed`: set when a user hides the Get started card. It holds no personal data and is removed on uninstall.
 - Folder `uploads/axle-leftovers/` with `exports/`, `trash/` and `dataset/`, with deny rules.
 - Cron `axle_leftovers_daily` (purge and rescan) and `axle_leftovers_scan_step` (background scan steps).
+
+Deleting Leftovers while the trash holds items deletes them for good, so the Plugins screen shows a warning under its row while the trash is not empty.
 
 The privacy exporter lists the items a user trashed; the eraser purges trashed batches that hold the user's meta and removes the user from trash records. Uninstall purges the trash (or restores it, with the filter), then removes the tables, options, cron events, transients and folder.
 
 ## Limits in 1.0
 
-- Theme leftovers (same machinery, planned for 1.1).
+- Posts of post types and terms of taxonomies that nothing registers any more are not listed yet.
+- Theme content restore refuses when a post ID exists again, and does not merge with edits made to the same theme since.
+- Theme content has no comments: only posts, their revisions, meta and term relationships are moved.
 - Columns plugins added to core tables are not listed.
 - A capability granted to single users (not through a role) is not removed.
 - The dataset lists every name a plugin's code mentions, including names it reads from other plugins (importers), so a dataset match is Likely, not Certain.

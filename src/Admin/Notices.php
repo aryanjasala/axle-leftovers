@@ -53,6 +53,25 @@ final class Notices implements Service {
 	public function register(): void {
 		add_action( 'admin_notices', array( $this, 'deleted_notice' ) );
 		add_action( 'admin_footer-plugins.php', array( $this, 'deactivation_dialog' ) );
+		add_action( 'after_plugin_row_' . plugin_basename( PLUGIN_FILE ), array( $this, 'trash_row_warning' ), 10, 0 );
+	}
+
+	/**
+	 * A line under the plugin's row while the trash holds items: deleting the
+	 * plugin deletes the trash for good, and WordPress asks nothing more.
+	 */
+	public function trash_row_warning(): void {
+		if ( ! current_user_can( Settings::capability() ) ) {
+			return;
+		}
+		$count = $this->trash->count();
+		if ( $count < 1 ) {
+			return;
+		}
+
+		/* translators: %d: number of items. */
+		$text = sprintf( _n( 'The Leftovers trash holds %d item. Deleting this plugin deletes it for good, and that cannot be undone. Restore it first if you may need it.', 'The Leftovers trash holds %d items. Deleting this plugin deletes them for good, and that cannot be undone. Restore them first if you may need them.', $count, 'axle-leftovers' ), $count );
+		echo '<tr class="plugin-update-tr ' . ( is_plugin_active( plugin_basename( PLUGIN_FILE ) ) ? 'active' : 'inactive' ) . ' alo-trash-warning"><td colspan="4" class="plugin-update colspanchange"><div class="update-message notice inline notice-warning notice-alt"><p>' . esc_html( $text ) . ' <a href="' . esc_url( Page::url( 'trash' ) ) . '">' . esc_html__( 'Open the trash', 'axle-leftovers' ) . '</a></p></div></td></tr>';
 	}
 
 	/**
