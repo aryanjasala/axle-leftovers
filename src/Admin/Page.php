@@ -859,7 +859,7 @@ final class Page implements Service {
 				$this->hidden( 'rescan', false );
 				echo '<input type="hidden" name="slug" value="' . esc_attr( $entry['slug'] ) . '">';
 				/* translators: %s: plugin or theme name. */
-				echo '<button type="submit" class="button-link" aria-label="' . esc_attr( sprintf( __( 'Read %s again', 'axle-leftovers' ), $entry['name'] ) ) . '">' . esc_html__( 'Read again', 'axle-leftovers' ) . '</button></form>';
+				echo '<button type="submit" class="button-link" aria-label="' . esc_attr( sprintf( __( 'Read again: %s', 'axle-leftovers' ), $entry['name'] ) ) . '">' . esc_html__( 'Read again', 'axle-leftovers' ) . '</button></form>';
 			}
 			echo '</td></tr>';
 		}
