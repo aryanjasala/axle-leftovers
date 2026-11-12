@@ -115,15 +115,19 @@ test.describe( 'Leftovers screen behaviour', () => {
 
 	test( 'a button that takes a while shows a spinner, sets aria-busy and cannot be pressed twice', async ( { page } ) => {
 		await page.goto( SCREEN );
+		let posts = 0;
 		await page.route( '**/admin-post.php', async ( route ) => {
-			await new Promise( ( resolve ) => setTimeout( resolve, 1500 ) );
+			posts++;
+			await new Promise( ( resolve ) => setTimeout( resolve, 2500 ) );
 			await route.continue();
 		} );
-		const button = page.getByRole( 'button', { name: 'Scan again' } );
-		await button.click();
-		await expect( button ).toHaveAttribute( 'aria-busy', 'true' );
-		await expect( page.locator( '.alo-spinner.is-active' ) ).toBeVisible();
+		// The click would wait for the slow navigation, so read the page while it is still the old one.
+		await page.getByRole( 'button', { name: 'Scan again' } ).click( { noWaitAfter: true } );
+		await page.waitForFunction( () => document.querySelector( '.alo-scan-form button[aria-busy="true"]' ) && document.querySelector( '.alo-scan-form + .alo-spinner.is-active, .alo-scan-form .alo-spinner.is-active' ) );
+		// A second press does nothing while the first runs.
+		await page.evaluate( () => document.querySelector( '.alo-scan-form button' ).click() );
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Scan started' );
+		expect( posts ).toBe( 1 );
 	} );
 
 	test( 'when looking up a deleted plugin\'s leftovers fails, the Plugins screen says what to do', async ( { page } ) => {

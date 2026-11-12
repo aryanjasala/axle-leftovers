@@ -55,8 +55,6 @@
 }
 
 .alo-confirm-list {
-	max-height: 200px;
-	overflow: auto;
 	margin-left: 16px;
 	list-style: disc;
 }

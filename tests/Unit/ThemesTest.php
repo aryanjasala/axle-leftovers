@@ -290,4 +290,26 @@ final class ThemesTest extends LeftoversTestCase {
 		Filters\expectApplied( 'axle_leftovers_item_capability' )->once()->andReturn( '  ' );
 		$this->assertSame( 'edit_css', Settings::item_capability( 'customcss' ) );
 	}
+
+	public function test_user_can_item_checks_the_network_and_the_type(): void {
+		Functions\when( 'current_user_can' )->alias(
+			static function ( $cap ) {
+				return in_array( $cap, array( 'manage_options', 'edit_theme_options' ), true );
+			}
+		);
+
+		$this->assertTrue( Settings::user_can_item( 'option' ) );
+		$this->assertTrue( Settings::user_can_item( 'template' ) );
+		$this->assertFalse( Settings::user_can_item( 'customcss' ), 'edit_css is missing.' );
+		$this->assertFalse( Settings::user_can_item( 'role' ), 'promote_users is missing.' );
+		$this->assertFalse( Settings::user_can_item( 'option', 'network' ), 'manage_network is missing.' );
+		$this->assertFalse( Settings::user_can_item( 'sitemeta', 'network' ) );
+	}
+
+	public function test_without_a_user_everything_is_allowed(): void {
+		Functions\when( 'get_current_user_id' )->justReturn( 0 );
+		Functions\when( 'current_user_can' )->justReturn( false );
+
+		$this->assertTrue( Settings::user_can_item( 'customcss', 'network' ) );
+	}
 }

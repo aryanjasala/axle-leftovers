@@ -40,7 +40,7 @@ test.describe( 'Online lookup and the full list', () => {
 		await expect( page.getByLabel( /Show a Look it up button/ ) ).not.toBeChecked();
 		await expect( page.getByLabel( /Allow downloading the full signature list/ ) ).not.toBeChecked();
 		await expect( page.getByRole( 'button', { name: 'Download the full list' } ) ).toHaveCount( 0 );
-		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( /Bundled list: \d+ plugins, built 20/ );
+		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( /Bundled list: \d+ plugins, built .+ ago\./ );
 		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
 
 		expect( seed.httpLog() ).toEqual( [] );
