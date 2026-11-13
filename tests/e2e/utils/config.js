@@ -12,5 +12,5 @@ module.exports = {
 	// This plugin's own Docker site by default. A shared site can be used by pointing WP_COMPOSE_DIR at its compose folder.
 	COMPOSE_DIR: process.env.WP_COMPOSE_DIR || path.join( __dirname, '..', 'env' ),
 	// Options the plugin stores, cleared before each run.
-	OPTIONS: ['axle_leftovers_settings', 'axle_leftovers_scan', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta'],
+	OPTIONS: ['axle_leftovers_settings', 'axle_leftovers_scan', 'axle_leftovers_observed', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta'],
 };

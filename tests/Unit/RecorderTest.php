@@ -17,6 +17,24 @@ use Brain\Monkey\Functions;
  */
 final class RecorderTest extends LeftoversTestCase {
 
+	public function test_post_types_and_taxonomies_registered_during_activation_belong_to_the_plugin(): void {
+		Functions\when( 'get_option' )->justReturn( array() );
+		Functions\when( 'apply_filters' )->returnArg( 2 );
+		$inventory = \Mockery::mock( Inventory::class );
+		$inventory->shouldReceive( 'names' )->andReturn( array() );
+		$ledger = \Mockery::mock( Ledger::class );
+		$ledger->shouldReceive( 'is_seen' )->andReturn( false );
+		$ledger->shouldReceive( 'record_seen' )->once()->with( 'posttype', 'acme_event', 'acme', 'activation' );
+		$ledger->shouldReceive( 'record_seen' )->once()->with( 'taxonomy', 'acme_genre', 'acme', 'activation' );
+
+		$recorder = new Recorder( $ledger, $inventory );
+		$recorder->before_activation( 'acme/acme.php' );
+		$recorder->post_type_registered( 'acme_event' );
+		$recorder->taxonomy_registered( 'acme_genre' );
+		$recorder->post_type_registered( 'post' );
+		$this->addToAssertionCount( 1 );
+	}
+
 	public function test_owner_from_trace(): void {
 		$frames = array(
 			array( 'file' => ABSPATH . 'wp-includes/option.php' ),

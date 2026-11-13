@@ -59,7 +59,7 @@ final class ServicesTest extends LeftoversTestCase {
 			},
 			$registered
 		);
-		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/get-settings', 'axle-leftovers/update-settings', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
+		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/get-observation', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/get-settings', 'axle-leftovers/update-settings', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
 		$this->assertTrue( $annotations['axle-leftovers/list-leftovers']['readonly'] );
 		$this->assertTrue( $annotations['axle-leftovers/trash-items']['destructive'] );
 		$this->assertTrue( $annotations['axle-leftovers/purge-trash']['destructive'] );
@@ -123,7 +123,7 @@ final class ServicesTest extends LeftoversTestCase {
 		$result = ( new Privacy( $trash ) )->erase( 'jane@example.com' );
 
 		$this->assertTrue( $result['items_removed'] );
-		$this->assertSame( array( "Deleted 1 trashed item that held the user's meta." ), $result['messages'] );
+		$this->assertSame( array( "Deleted 1 trashed item that held the user's meta, posts or comments." ), $result['messages'] );
 	}
 
 	public function test_site_health_flags_heavy_autoloaded_leftovers(): void {
