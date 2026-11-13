@@ -318,9 +318,10 @@ test.describe( 'Axle Leftovers', () => {
 		expect( wp( 'plugin', 'is-active', 'axle-leftovers' ) ).toBe( '' );
 
 		await page.locator( 'tr[data-plugin="axle-leftovers/axle-leftovers.php"] .deactivate a' ).click();
-		// The page is already on plugins.php, so wait for the form's own answer, not for the URL.
-		await Promise.all( [ page.waitForResponse( ( response ) => response.url().includes( 'admin-post.php' ) ), dialog.getByRole( 'button', { name: 'Restore all' } ).click() ] );
-		await page.waitForURL( /plugins\.php/ );
+		await dialog.getByRole( 'button', { name: 'Restore all' } ).click();
+		// The page is already on plugins.php, so wait for the database, not for the URL.
+		await expect.poll( () => seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" )[ 0 ][ 0 ], { timeout: 30_000 } ).toBe( 'restored' );
+		await page.waitForLoadState( 'load' );
 		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" ) ).toEqual( [ [ 'restored' ] ] );
 		expect( wp( 'cron', 'event', 'list', '--fields=hook', '--format=csv' ) ).toContain( 'lm_cleanup' );
 		await expect( page.locator( '#alo-deactivate' ) ).toHaveCount( 0 );
