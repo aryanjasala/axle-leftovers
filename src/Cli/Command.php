@@ -7,10 +7,12 @@
 
 namespace AryanX\Axle\Leftovers\Cli;
 
+use AryanX\Axle\Leftovers\Content;
 use AryanX\Axle\Leftovers\DatasetUpdater;
 use AryanX\Axle\Leftovers\Dataset;
 use AryanX\Axle\Leftovers\Ledger;
 use AryanX\Axle\Leftovers\Lookup;
+use AryanX\Axle\Leftovers\Observer;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Settings;
 use AryanX\Axle\Leftovers\Signature;
@@ -83,7 +85,7 @@ final class Command {
 	 * : Only items of deleted plugins (plugin) or deleted themes (theme).
 	 *
 	 * [--type=<type>]
-	 * : table, option, cron, postmeta, usermeta, termmeta, commentmeta, folder, template, globalstyles, customcss, role, cap or sitemeta.
+	 * : table, option, cron, postmeta, usermeta, termmeta, commentmeta, folder, template, globalstyles, customcss, posttype, taxonomy, role, cap or sitemeta.
 	 *
 	 * [--confidence=<level>]
 	 * : certain, likely, guess or unknown.
@@ -99,6 +101,7 @@ final class Command {
 	 *     wp axle-leftovers list --plugin=contact-form-7
 	 *     wp axle-leftovers list --theme=twentytwentyone
 	 *     wp axle-leftovers list --kind=theme --type=template
+	 *     wp axle-leftovers list --type=posttype
 	 *     wp axle-leftovers list --confidence=unknown --format=json
 	 *
 	 * @subcommand list
@@ -165,6 +168,11 @@ final class Command {
 			return;
 		}
 
+		if ( Content::is_content_type( (string) $item['type'] ) ) {
+			// Counts per status, dates, meta, comments, relationships and example titles.
+			$item['summary'] = ( new Content() )->summary( $item );
+		}
+
 		$format = (string) ( $assoc_args['format'] ?? 'table' );
 		if ( 'table' !== $format ) {
 			WP_CLI::print_value( $item, array( 'format' => $format ) );
@@ -182,6 +190,62 @@ final class Command {
 			);
 		}
 		Utils\format_items( 'table', $rows, array( 'field', 'value' ) );
+	}
+
+	/**
+	 * Shows which kinds of request were watched for registered post types and taxonomies.
+	 *
+	 * A post type or taxonomy is only listed once nothing registered it for the
+	 * observation period (7 days by default, setting observe_days) on every
+	 * watched kind of request. This shows the kinds, since when, and when the
+	 * first unregistered type can be listed. With a type and a name it shows
+	 * where that one stands: registered, recent, watching or unregistered.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [<type>]
+	 * : posttype or taxonomy.
+	 *
+	 * [<name>]
+	 * : Post type or taxonomy slug.
+	 *
+	 * [--format=<format>]
+	 * : table, csv, json or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp axle-leftovers observe
+	 *     wp axle-leftovers observe posttype event
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function observe( $args, $assoc_args ): void {
+		$format = (string) ( $assoc_args['format'] ?? 'table' );
+		if ( isset( $args[1] ) ) {
+			$verdict = Observer::verdict( (string) $args[0], (string) $args[1] );
+			Utils\format_items(
+				$format,
+				array(
+					array(
+						'status'    => $verdict['status'],
+						'days'      => $verdict['days'],
+						'last_seen' => $verdict['last'] ? gmdate( 'Y-m-d H:i:s', $verdict['last'] ) : '',
+						'ready'     => $verdict['ready'] ? gmdate( 'Y-m-d H:i:s', $verdict['ready'] ) : '',
+					),
+				),
+				array( 'status', 'days', 'last_seen', 'ready' )
+			);
+			return;
+		}
+
+		$report = Observer::report();
+		Utils\format_items( $format, $report['kinds'], array( 'kind', 'required', 'first', 'last', 'watched_days' ) );
+		WP_CLI::log( sprintf( 'Watching since %s. Period: %d days. %d post types and %d taxonomies seen.', '' !== $report['since'] ? $report['since'] . ' UTC' : 'now', $report['days'], $report['post_types'], $report['taxonomies'] ) );
+		WP_CLI::log( '' !== $report['ready'] ? sprintf( 'The first unregistered type can be listed after %s UTC.', $report['ready'] ) : 'Every watched kind of request has been seen for the whole period.' );
 	}
 
 	/**
@@ -253,7 +317,7 @@ final class Command {
 	 * : An item type, or `list` or `purge`.
 	 *
 	 * [<name>...]
-	 * : Item names. Typing a name confirms Guess and Unknown items.
+	 * : Item names. Typing a name confirms Guess and Unknown items, and is always needed for a post type or taxonomy.
 	 *
 	 * [--plugin=<slug>]
 	 * : Trash every listed item of this owner (of the given type, if any). Guess and Unknown items still need their names typed.
@@ -278,6 +342,7 @@ final class Command {
 	 *     wp axle-leftovers trash table wp_cf7_entries option cf7_settings --yes
 	 *     wp axle-leftovers trash --plugin=contact-form-7 --yes
 	 *     wp axle-leftovers trash --theme=old-theme --yes
+	 *     wp axle-leftovers trash posttype event --yes
 	 *     wp axle-leftovers trash list
 	 *     wp axle-leftovers trash purge --older-than=30 --yes
 	 *
@@ -515,7 +580,7 @@ final class Command {
 	 * : list, get or set. Default: list.
 	 *
 	 * [<key>]
-	 * : With get or set: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup or remote_dataset.
+	 * : With get or set: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset or observe_days.
 	 *
 	 * [<value>]
 	 * : With set: a number, or true or false for the switches. Turning on online_lookup or remote_dataset allows the external services described in the readme.

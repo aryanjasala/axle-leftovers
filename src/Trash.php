@@ -166,6 +166,28 @@ class Trash {
 				$fail( 'item_cap', Messages::get( 'item_cap', $name ) );
 				continue;
 			}
+			if ( Content::is_content_type( $type ) ) {
+				// The scan may be days old: ask the observer again, right now.
+				$verdict = Observer::verdict( $type, $name );
+				if ( 'registered' === $verdict['status'] ) {
+					$fail( 'registered', Messages::get( 'registered', $name ) );
+					continue;
+				}
+				if ( 'unregistered' !== $verdict['status'] ) {
+					$fail( 'watching', Messages::get( 'watching', $name, (string) $verdict['days'] ) );
+					continue;
+				}
+				$max = defined( 'WP_CLI' ) && WP_CLI ? 0 : Settings::content_max_rows();
+				if ( $max > 0 && (int) $item['rows'] > $max ) {
+					$fail( 'too_big', Messages::get( 'too_big', $name, number_format_i18n( (int) $item['rows'] ), number_format_i18n( $max ) ) );
+					continue;
+				}
+			}
+			if ( Content::is_content_type( $type ) && ! in_array( $name, $confirm, true ) ) {
+				// Always, whatever the owner evidence says: this is somebody's content.
+				$fail( 'confirm', Messages::get( 'confirm_content', $name ) );
+				continue;
+			}
 			if ( Settings::require_typed_confirmation( $item['confidence'] ) && ! in_array( $name, $confirm, true ) ) {
 				$fail( 'confirm', Messages::get( 'confirm', $name ) );
 				continue;
@@ -610,6 +632,10 @@ class Trash {
 			case 'globalstyles':
 			case 'customcss':
 				return array() !== ( new Themes() )->post_ids( $type, $name );
+			case 'posttype':
+				return array() !== ( new Content() )->post_ids( $name );
+			case 'taxonomy':
+				return array() !== ( new Content() )->term_taxonomy_ids( $name );
 		}
 
 		return false;
@@ -684,7 +710,11 @@ class Trash {
 			case 'template':
 			case 'globalstyles':
 			case 'customcss':
+			case 'posttype':
 				$result = $this->trash_posts( $type, $name, $file . '.jsonl' );
+				break;
+			case 'taxonomy':
+				$result = $this->trash_terms( $name, $file . '.jsonl' );
 				break;
 		}
 
@@ -971,17 +1001,28 @@ class Trash {
 	}
 
 	/**
-	 * Theme content: every post of one kind that belongs to a theme, with its
-	 * revisions, meta and term relationships, exported to a JSON-lines file
-	 * and then deleted, in batches. Restore puts the rows back with their IDs.
+	 * The posts an item stands for: theme content of one kind, or every post of a post type.
 	 *
-	 * @param string $type template, globalstyles or customcss.
-	 * @param string $name Theme folder name.
+	 * @param string $type template, globalstyles, customcss or posttype.
+	 * @param string $name Theme folder name, or post type.
+	 * @return int[]
+	 */
+	private function post_ids_for( string $type, string $name ): array {
+		return 'posttype' === $type ? ( new Content() )->post_ids( $name ) : ( new Themes() )->post_ids( $type, $name );
+	}
+
+	/**
+	 * Posts of one theme kind or one post type, with their revisions, meta,
+	 * comments and term relationships, exported to a JSON-lines file and then
+	 * deleted, in batches. Restore puts the rows back with their IDs.
+	 *
+	 * @param string $type template, globalstyles, customcss or posttype.
+	 * @param string $name Theme folder name, or post type.
 	 * @param string $file Export path; also what restore reads.
 	 * @return array|WP_Error
 	 */
 	private function trash_posts( string $type, string $name, string $file ) {
-		$ids = ( new Themes() )->post_ids( $type, $name );
+		$ids = $this->post_ids_for( $type, $name );
 		if ( ! $ids ) {
 			return new WP_Error( 'axle_leftovers_missing', Messages::get( 'missing', $name ) );
 		}
@@ -997,6 +1038,12 @@ class Trash {
 			'payload'  => array(
 				'rows'      => count( $ids ),
 				'revisions' => count( $written['ids'] ) - count( $ids ),
+				'meta'      => (int) $written['meta'],
+				'comments'  => (int) $written['comments'],
+				'relations' => (int) $written['relations'],
+				'authors'   => $written['authors'],
+				'people'    => $written['people'],
+				'emails'    => $written['emails'],
 				'file'      => $file,
 			),
 			'location' => $file,
@@ -1005,11 +1052,21 @@ class Trash {
 	}
 
 	/**
+	 * A one-way hash of an email address, so the trash can tell the privacy tools whose comments a batch holds.
+	 *
+	 * @param string $email Email address.
+	 * @return string
+	 */
+	public static function email_hash( string $email ): string {
+		return hash( 'sha256', strtolower( trim( $email ) ) );
+	}
+
+	/**
 	 * Copies posts, their revisions, meta and term relationships to a JSON-lines file.
 	 *
 	 * @param int[]  $ids  Post IDs.
 	 * @param string $path Absolute path.
-	 * @return array{ids: int[], terms: array<string, int[]>}|null Every post ID written (revisions included) and the term_taxonomy IDs by taxonomy, or null when the file cannot be written.
+	 * @return array{ids: int[], terms: array<string, int[]>, meta: int, comments: int, relations: int, authors: int[], people: int[], emails: string[]}|null Every post ID written (revisions included), the term_taxonomy IDs by taxonomy, the rows written besides posts, and who the posts and comments belong to (for the privacy tools), or null when the file cannot be written.
 	 */
 	private function export_posts( array $ids, string $path ): ?array {
 		global $wpdb;
@@ -1019,8 +1076,14 @@ class Trash {
 			return null;
 		}
 
-		$all   = array();
-		$terms = array();
+		$all       = array();
+		$terms     = array();
+		$meta_rows = 0;
+		$comments  = 0;
+		$relations = 0;
+		$authors   = array();
+		$people    = array();
+		$emails    = array();
 		foreach ( array_chunk( array_map( 'intval', $ids ), Settings::post_batch_size() ) as $chunk ) {
 			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Revisions of the posts being exported, one batch of IDs at a time.
@@ -1033,24 +1096,53 @@ class Trash {
 			foreach ( $posts as $row ) {
 				$this->storage->write( $handle, (string) wp_json_encode( array( 't' => 'post', 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
 				$all[] = (int) $row['ID'];
+				if ( (int) ( $row['post_author'] ?? 0 ) > 0 ) {
+					$authors[ (int) $row['post_author'] ] = (int) $row['post_author'];
+				}
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
 			$metas = (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, post_id, meta_key, meta_value FROM %i WHERE post_id IN ({$marks}) ORDER BY meta_id", array_merge( array( $wpdb->postmeta ), $batch ) ), ARRAY_A );
 			foreach ( $metas as $row ) {
 				$this->storage->write( $handle, (string) wp_json_encode( array( 't' => 'meta', 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
+				++$meta_rows;
+			}
+			$comment_rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM %i WHERE comment_post_ID IN ({$marks}) ORDER BY comment_ID", array_merge( array( $wpdb->comments ), $batch ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+			foreach ( $comment_rows as $row ) {
+				$this->storage->write( $handle, (string) wp_json_encode( array( 't' => 'comment', 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
+				++$comments;
+				if ( (int) ( $row['user_id'] ?? 0 ) > 0 ) {
+					$people[ (int) $row['user_id'] ] = (int) $row['user_id'];
+				}
+				if ( '' !== (string) ( $row['comment_author_email'] ?? '' ) ) {
+					$emails[ self::email_hash( (string) $row['comment_author_email'] ) ] = true;
+				}
+			}
+			if ( $comment_rows ) {
+				$comment_marks = implode( ',', array_fill( 0, count( $comment_rows ), '%d' ) );
+				$comment_meta  = (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, comment_id, meta_key, meta_value FROM %i WHERE comment_id IN ({$comment_marks}) ORDER BY meta_id", array_merge( array( $wpdb->commentmeta ), array_map( 'intval', array_column( $comment_rows, 'comment_ID' ) ) ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+				foreach ( $comment_meta as $row ) {
+					$this->storage->write( $handle, (string) wp_json_encode( array( 't' => 'commentmeta', 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
+				}
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
 			$rels = (array) $wpdb->get_results( $wpdb->prepare( "SELECT tr.object_id, tr.term_taxonomy_id, tr.term_order, tt.taxonomy, t.slug, t.name FROM %i tr INNER JOIN %i tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN %i t ON t.term_id = tt.term_id WHERE tr.object_id IN ({$marks}) ORDER BY tr.object_id", array_merge( array( $wpdb->term_relationships, $wpdb->term_taxonomy, $wpdb->terms ), $batch ) ), ARRAY_A );
 			foreach ( $rels as $row ) {
 				$this->storage->write( $handle, (string) wp_json_encode( array( 't' => 'rel', 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
 				$terms[ (string) $row['taxonomy'] ][ (int) $row['term_taxonomy_id'] ] = (int) $row['term_taxonomy_id'];
+				++$relations;
 			}
 		}
 		$this->storage->close( $handle );
 
 		return array(
-			'ids'   => $all,
-			'terms' => array_map( 'array_values', $terms ),
+			'ids'       => $all,
+			'terms'     => array_map( 'array_values', $terms ),
+			'meta'      => $meta_rows,
+			'comments'  => $comments,
+			'relations' => $relations,
+			'authors'   => array_values( $authors ),
+			'people'    => array_values( $people ),
+			'emails'    => array_keys( $emails ),
 		);
 	}
 
@@ -1068,6 +1160,10 @@ class Trash {
 			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Batched delete after the export was written.
 			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE post_id IN ({$marks})", array_merge( array( $wpdb->postmeta ), $chunk ) ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Comment meta first, while the comments still say which posts they belong to.
+			$wpdb->query( $wpdb->prepare( "DELETE cm FROM %i cm INNER JOIN %i c ON c.comment_ID = cm.comment_id WHERE c.comment_post_ID IN ({$marks})", array_merge( array( $wpdb->commentmeta, $wpdb->comments ), $chunk ) ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The comments of the posts that are in the export.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE comment_post_ID IN ({$marks})", array_merge( array( $wpdb->comments ), $chunk ) ) );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Batched delete after the export was written.
 			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE object_id IN ({$marks})", array_merge( array( $wpdb->term_relationships ), $chunk ) ) );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Batched delete after the export was written.
@@ -1087,15 +1183,18 @@ class Trash {
 			if ( function_exists( 'clean_post_cache' ) ) {
 				clean_post_cache( (int) $id );
 			}
+			wp_cache_delete( 'comments-' . (int) $id, 'counts' );
 		}
 		foreach ( $terms as $taxonomy => $tt_ids ) {
-			if ( function_exists( 'wp_update_term_count_now' ) && $tt_ids ) {
+			// A taxonomy nothing registers has no count callback: recounting it would write 0 over a real count.
+			if ( function_exists( 'wp_update_term_count_now' ) && $tt_ids && taxonomy_exists( (string) $taxonomy ) ) {
 				wp_update_term_count_now( array_map( 'intval', $tt_ids ), (string) $taxonomy );
 			}
 		}
 		if ( function_exists( 'wp_cache_set_last_changed' ) ) {
 			wp_cache_set_last_changed( 'posts' );
 			wp_cache_set_last_changed( 'terms' );
+			wp_cache_set_last_changed( 'comment' );
 		}
 	}
 
@@ -1160,8 +1259,20 @@ class Trash {
 			} elseif ( 'meta' === $entry['t'] ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its meta ID.
 				$wpdb->insert( $wpdb->postmeta, $row );
+			} elseif ( 'comment' === $entry['t'] ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its comment ID.
+				if ( false === $wpdb->insert( $wpdb->comments, $row ) ) {
+					$error = new WP_Error( 'axle_leftovers_failed', Messages::get( 'failed', $name ) );
+				}
+			} elseif ( 'commentmeta' === $entry['t'] ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its meta ID.
+				$wpdb->insert( $wpdb->commentmeta, $row );
 			} elseif ( 'rel' === $entry['t'] ) {
-				$tt_id = $this->term_taxonomy_for( (string) $row['taxonomy'], (string) $row['slug'], (string) $row['name'] );
+				$tt_id = $this->term_taxonomy_for( (string) $row['taxonomy'], (string) $row['slug'], (string) $row['name'], (int) $row['term_taxonomy_id'] );
+				if ( $tt_id < 0 ) {
+					// The term is gone and its taxonomy is not registered: nothing to attach to, so the link is not restored.
+					continue;
+				}
 				if ( $tt_id < 1 ) {
 					$error = new WP_Error( 'axle_leftovers_failed', Messages::get( 'failed', $name ) );
 					continue;
@@ -1224,9 +1335,24 @@ class Trash {
 	 * @param string $taxonomy Taxonomy.
 	 * @param string $slug     Term slug.
 	 * @param string $name     Term name.
-	 * @return int 0 when the term cannot be found or created.
+	 * @param int    $tt_id    The term_taxonomy ID the export recorded, 0 when unknown.
+	 * @return int The ID, 0 when the term cannot be found or created, -1 when it is gone and its taxonomy is not registered.
 	 */
-	private function term_taxonomy_for( string $taxonomy, string $slug, string $name ): int {
+	private function term_taxonomy_for( string $taxonomy, string $slug, string $name, int $tt_id = 0 ): int {
+		global $wpdb;
+
+		if ( $tt_id > 0 ) {
+			// The exact row, when it is still there: this keeps the IDs, and works for taxonomies nothing registers.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- Must be live.
+			$found = $wpdb->get_var( $wpdb->prepare( 'SELECT term_taxonomy_id FROM %i WHERE term_taxonomy_id = %d AND taxonomy = %s', $wpdb->term_taxonomy, $tt_id, $taxonomy ) );
+			if ( null !== $found ) {
+				return (int) $found;
+			}
+		}
+		if ( ! taxonomy_exists( $taxonomy ) ) {
+			return -1;
+		}
+
 		$term = get_term_by( 'slug', $slug, $taxonomy );
 		if ( ! $term instanceof \WP_Term ) {
 			$made = wp_insert_term(
@@ -1242,6 +1368,310 @@ class Trash {
 		}
 
 		return (int) $term->term_taxonomy_id;
+	}
+
+	/**
+	 * Taxonomy: every term of one taxonomy, with its term meta and the
+	 * relationships that point at it, exported to a JSON-lines file and then
+	 * deleted, in batches. Restore puts the rows back with their IDs.
+	 *
+	 * @param string $name Taxonomy.
+	 * @param string $file Export path; also what restore reads.
+	 * @return array|WP_Error
+	 */
+	private function trash_terms( string $name, string $file ) {
+		$ids = ( new Content() )->term_taxonomy_ids( $name );
+		if ( ! $ids ) {
+			return new WP_Error( 'axle_leftovers_missing', Messages::get( 'missing', $name ) );
+		}
+
+		$written = $this->export_terms( $ids, $this->storage->dir( 'exports' ) . '/' . substr( $file, 8 ) );
+		if ( null === $written ) {
+			return new WP_Error( 'axle_leftovers_export', Messages::get( 'export_failed', $name ) );
+		}
+
+		$this->delete_terms( $ids, $written['terms'], $written['objects'], $name );
+
+		return array(
+			'payload'  => array(
+				'rows'      => count( $ids ),
+				'relations' => (int) $written['relations'],
+				'file'      => $file,
+			),
+			'location' => $file,
+			'export'   => $file,
+		);
+	}
+
+	/**
+	 * Copies term_taxonomy rows, their terms, term meta and relationships to a JSON-lines file.
+	 *
+	 * @param int[]  $ids  term_taxonomy IDs.
+	 * @param string $path Absolute path.
+	 * @return array{terms: int[], objects: int[], relations: int}|null Term IDs, IDs of the objects that had a term, and the relationships written, or null when the file cannot be written.
+	 */
+	private function export_terms( array $ids, string $path ): ?array {
+		global $wpdb;
+
+		$handle = $this->storage->open_append( $path );
+		if ( false === $handle ) {
+			return null;
+		}
+
+		$term_ids  = array();
+		$objects   = array();
+		$relations = 0;
+		$write     = function ( string $kind, array $row ) use ( $handle ): void {
+			$this->storage->write( $handle, (string) wp_json_encode( array( 't' => $kind, 'row' => $row ), JSON_UNESCAPED_SLASHES ) . "\n" ); // phpcs:ignore WordPress.Arrays.ArrayDeclarationSpacing.AssociativeArrayFound -- One short line.
+		};
+		foreach ( array_chunk( array_map( 'intval', $ids ), Settings::post_batch_size() ) as $chunk ) {
+			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+			$taxonomy_rows = (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM %i WHERE term_taxonomy_id IN ({$marks}) ORDER BY term_taxonomy_id", array_merge( array( $wpdb->term_taxonomy ), $chunk ) ), ARRAY_A );
+			$chunk_terms   = array();
+			foreach ( $taxonomy_rows as $row ) {
+				$write( 'tt', $row );
+				$chunk_terms[ (int) $row['term_id'] ] = (int) $row['term_id'];
+			}
+			$chunk_terms = array_values( $chunk_terms );
+			if ( $chunk_terms ) {
+				$term_marks = implode( ',', array_fill( 0, count( $chunk_terms ), '%d' ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+				foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM %i WHERE term_id IN ({$term_marks}) ORDER BY term_id", array_merge( array( $wpdb->terms ), $chunk_terms ) ), ARRAY_A ) as $row ) {
+					$write( 'term', $row );
+				}
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+				foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT meta_id, term_id, meta_key, meta_value FROM %i WHERE term_id IN ({$term_marks}) ORDER BY meta_id", array_merge( array( $wpdb->termmeta ), $chunk_terms ) ), ARRAY_A ) as $row ) {
+					$write( 'tmeta', $row );
+				}
+				$term_ids = array_merge( $term_ids, $chunk_terms );
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Copies whole rows, so a restore is exact.
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT object_id, term_taxonomy_id, term_order FROM %i WHERE term_taxonomy_id IN ({$marks}) ORDER BY object_id", array_merge( array( $wpdb->term_relationships ), $chunk ) ), ARRAY_A ) as $row ) {
+				$write( 'trel', $row );
+				$objects[ (int) $row['object_id'] ] = (int) $row['object_id'];
+				++$relations;
+			}
+		}
+		$this->storage->close( $handle );
+
+		return array(
+			'terms'     => array_values( array_unique( $term_ids ) ),
+			'objects'   => array_values( $objects ),
+			'relations' => $relations,
+		);
+	}
+
+	/**
+	 * Deletes terms of one taxonomy, their relationships and, when no other
+	 * taxonomy shares them, the term rows and their meta, in batches.
+	 *
+	 * @param int[]  $ids      term_taxonomy IDs.
+	 * @param int[]  $term_ids Term IDs they point at.
+	 * @param int[]  $objects  IDs of objects that had one of the terms.
+	 * @param string $taxonomy Taxonomy.
+	 */
+	private function delete_terms( array $ids, array $term_ids, array $objects, string $taxonomy ): void {
+		global $wpdb;
+
+		foreach ( array_chunk( $ids, Settings::post_batch_size() ) as $chunk ) {
+			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The rows are in the export.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE term_taxonomy_id IN ({$marks})", array_merge( array( $wpdb->term_relationships ), $chunk ) ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The rows are in the export.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE term_taxonomy_id IN ({$marks})", array_merge( array( $wpdb->term_taxonomy ), $chunk ) ) );
+		}
+
+		foreach ( array_chunk( $term_ids, Settings::post_batch_size() ) as $chunk ) {
+			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+			// A term row can be shared with a term of another taxonomy; that one stays.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Must be live.
+			$shared = array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT term_id FROM %i WHERE term_id IN ({$marks})", array_merge( array( $wpdb->term_taxonomy ), $chunk ) ) ) );
+			$gone   = array_values( array_diff( $chunk, $shared ) );
+			if ( ! $gone ) {
+				continue;
+			}
+			$gone_marks = implode( ',', array_fill( 0, count( $gone ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The rows are in the export.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE term_id IN ({$gone_marks})", array_merge( array( $wpdb->termmeta ), $gone ) ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- The rows are in the export.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM %i WHERE term_id IN ({$gone_marks})", array_merge( array( $wpdb->terms ), $gone ) ) );
+		}
+
+		$this->clean_term_caches( $term_ids, $objects, $taxonomy );
+	}
+
+	/**
+	 * Re-inserts term relationships whose object still exists.
+	 *
+	 * @param array<int, array> $links Relationship rows: object_id, term_taxonomy_id, term_order.
+	 * @return array<int, int> IDs of the objects that got their terms back, as keys and values.
+	 */
+	private function insert_term_links( array $links ): array {
+		global $wpdb;
+
+		if ( ! $links ) {
+			return array();
+		}
+
+		$object_ids = array_values( array_unique( array_map( 'intval', array_column( $links, 'object_id' ) ) ) );
+		$marks      = implode( ',', array_fill( 0, count( $object_ids ), '%d' ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Which objects still exist.
+		$alive = array_flip( array_map( 'intval', (array) $wpdb->get_col( $wpdb->prepare( "SELECT ID FROM %i WHERE ID IN ({$marks})", array_merge( array( $wpdb->posts ), $object_ids ) ) ) ) );
+		$done  = array();
+		foreach ( $links as $row ) {
+			if ( isset( $alive[ (int) $row['object_id'] ] ) ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the relationship.
+				$wpdb->insert( $wpdb->term_relationships, $row );
+				$done[ (int) $row['object_id'] ] = (int) $row['object_id'];
+			}
+		}
+
+		return $done;
+	}
+
+	/**
+	 * Clears the caches of terms deleted or inserted directly.
+	 *
+	 * @param int[]  $term_ids Term IDs.
+	 * @param int[]  $objects  Object IDs whose term lists changed.
+	 * @param string $taxonomy Taxonomy.
+	 */
+	private function clean_term_caches( array $term_ids, array $objects, string $taxonomy ): void {
+		wp_cache_delete_multiple( $term_ids, 'terms' );
+		wp_cache_delete_multiple( $term_ids, 'term_meta' );
+		foreach ( array_chunk( $objects, 1000 ) as $chunk ) {
+			wp_cache_delete_multiple( $chunk, $taxonomy . '_relationships' );
+		}
+		wp_cache_delete( 'all_ids', $taxonomy );
+		wp_cache_delete( 'get', $taxonomy );
+		if ( function_exists( 'wp_cache_set_last_changed' ) ) {
+			wp_cache_set_last_changed( 'terms' );
+		}
+	}
+
+	/**
+	 * Re-inserts a taxonomy's terms from the export with their original IDs.
+	 *
+	 * Refuses when any term_taxonomy ID is taken or a term ID holds another
+	 * term. If an insert fails half way, the rows this restore already added
+	 * are removed again. A relationship whose object is gone is not restored.
+	 *
+	 * @param string $name Taxonomy.
+	 * @param string $file Export path, relative to the storage folder.
+	 * @return true|WP_Error
+	 */
+	private function restore_terms( string $name, string $file ) {
+		global $wpdb;
+
+		$path = $this->storage->dir() . '/' . $file;
+		if ( '' === $file || ! is_file( $path ) ) {
+			return new WP_Error( 'axle_leftovers_gone', Messages::get( 'gone', $name ) );
+		}
+
+		// First pass: nothing may be in the way.
+		$taxonomy_ids = array();
+		$term_slugs   = array();
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Read line by line; the file can be large.
+		$handle = fopen( $path, 'rb' );
+		if ( false === $handle ) {
+			return new WP_Error( 'axle_leftovers_gone', Messages::get( 'gone', $name ) );
+		}
+		while ( false !== ( $line = fgets( $handle ) ) ) { // phpcs:ignore WordPress.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition -- The standard way to read a file by line.
+			$entry = json_decode( $line, true );
+			if ( is_array( $entry ) && isset( $entry['row'] ) && 'tt' === $entry['t'] ) {
+				$taxonomy_ids[] = (int) $entry['row']['term_taxonomy_id'];
+			} elseif ( is_array( $entry ) && isset( $entry['row'] ) && 'term' === $entry['t'] ) {
+				$term_slugs[ (int) $entry['row']['term_id'] ] = (string) $entry['row']['slug'];
+			}
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- See fopen() above.
+		fclose( $handle );
+
+		foreach ( array_chunk( $taxonomy_ids, Settings::post_batch_size() ) as $chunk ) {
+			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Must be live.
+			if ( null !== $wpdb->get_var( $wpdb->prepare( "SELECT term_taxonomy_id FROM %i WHERE term_taxonomy_id IN ({$marks}) LIMIT 1", array_merge( array( $wpdb->term_taxonomy ), $chunk ) ) ) ) {
+				return new WP_Error( 'axle_leftovers_taken', Messages::get( 'taken', $name ) );
+			}
+		}
+		$existing = array();
+		foreach ( array_chunk( array_keys( $term_slugs ), Settings::post_batch_size() ) as $chunk ) {
+			$marks = implode( ',', array_fill( 0, count( $chunk ), '%d' ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- Must be live.
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( "SELECT term_id, slug FROM %i WHERE term_id IN ({$marks})", array_merge( array( $wpdb->terms ), $chunk ) ), ARRAY_A ) as $row ) {
+				if ( $term_slugs[ (int) $row['term_id'] ] !== (string) $row['slug'] ) {
+					return new WP_Error( 'axle_leftovers_taken', Messages::get( 'taken', $name ) );
+				}
+				$existing[ (int) $row['term_id'] ] = true;
+			}
+		}
+
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Read line by line; the file can be large.
+		$handle = fopen( $path, 'rb' );
+		if ( false === $handle ) {
+			return new WP_Error( 'axle_leftovers_gone', Messages::get( 'gone', $name ) );
+		}
+
+		$added_tt    = array();
+		$added_terms = array();
+		$objects     = array();
+		$pending     = array();
+		$error       = null;
+		while ( null === $error ) {
+			$line = fgets( $handle );
+			if ( false === $line ) {
+				break;
+			}
+			$entry = json_decode( $line, true );
+			if ( ! is_array( $entry ) || ! isset( $entry['row'] ) || ! is_array( $entry['row'] ) ) {
+				continue;
+			}
+			$row = $entry['row'];
+
+			if ( 'tt' === $entry['t'] ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its ID.
+				if ( false === $wpdb->insert( $wpdb->term_taxonomy, $row ) ) {
+					$error = new WP_Error( 'axle_leftovers_failed', Messages::get( 'failed', $name ) );
+				} else {
+					$added_tt[] = (int) $row['term_taxonomy_id'];
+				}
+			} elseif ( 'term' === $entry['t'] ) {
+				if ( ! isset( $existing[ (int) $row['term_id'] ] ) && ! isset( $added_terms[ (int) $row['term_id'] ] ) ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its ID.
+					if ( false === $wpdb->insert( $wpdb->terms, $row ) ) {
+						$error = new WP_Error( 'axle_leftovers_failed', Messages::get( 'failed', $name ) );
+					} else {
+						$added_terms[ (int) $row['term_id'] ] = (int) $row['term_id'];
+					}
+				}
+			} elseif ( 'tmeta' === $entry['t'] ) {
+				if ( isset( $added_terms[ (int) $row['term_id'] ] ) ) {
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Re-inserting the raw row, with its meta ID.
+					$wpdb->insert( $wpdb->termmeta, $row );
+				}
+			} elseif ( 'trel' === $entry['t'] ) {
+				$pending[] = $row;
+				if ( count( $pending ) >= Settings::post_batch_size() ) {
+					$objects += $this->insert_term_links( $pending );
+					$pending  = array();
+				}
+			}
+		}
+		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- See fopen() above.
+		fclose( $handle );
+		if ( null === $error ) {
+			$objects += $this->insert_term_links( $pending );
+		}
+
+		if ( null !== $error ) {
+			$this->delete_terms( $added_tt, array_values( $added_terms ), array_values( $objects ), $name );
+
+			return $error;
+		}
+		$this->clean_term_caches( array_keys( $term_slugs ), array_values( $objects ), $name );
+
+		return true;
 	}
 
 	/**
@@ -1291,7 +1721,14 @@ class Trash {
 				case 'template':
 				case 'globalstyles':
 				case 'customcss':
-					if ( null === $this->export_posts( ( new Themes() )->post_ids( $type, $name ), $base . '.jsonl' ) ) {
+				case 'posttype':
+					if ( null === $this->export_posts( $this->post_ids_for( $type, $name ), $base . '.jsonl' ) ) {
+						return new WP_Error( 'axle_leftovers_export', Messages::get( 'export_failed', $name ) );
+					}
+					$files[] = $base . '.jsonl';
+					continue 2;
+				case 'taxonomy':
+					if ( null === $this->export_terms( ( new Content() )->term_taxonomy_ids( $name ), $base . '.jsonl' ) ) {
 						return new WP_Error( 'axle_leftovers_export', Messages::get( 'export_failed', $name ) );
 					}
 					$files[] = $base . '.jsonl';
@@ -1577,7 +2014,11 @@ class Trash {
 			case 'template':
 			case 'globalstyles':
 			case 'customcss':
+			case 'posttype':
 				return $this->restore_posts( $name, (string) ( $payload['file'] ?? '' ) );
+
+			case 'taxonomy':
+				return $this->restore_terms( $name, (string) ( $payload['file'] ?? '' ) );
 		}
 
 		return new WP_Error( 'axle_leftovers_type', Messages::get( 'bad_type', (string) $row['item_type'] ) );

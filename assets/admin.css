@@ -122,3 +122,25 @@
 .axle-ui .button.axle-button--danger {
 	color: var(--axle-error-text);
 }
+
+.alo-sample {
+	margin: 6px 0 2px;
+}
+
+.alo-sample summary {
+	cursor: pointer;
+}
+
+.alo-sample p {
+	margin: 4px 0;
+}
+
+.alo-titles {
+	margin: 4px 0 0;
+	padding-left: 18px;
+	list-style: disc;
+}
+
+.alo-watching {
+	margin: 12px 0;
+}

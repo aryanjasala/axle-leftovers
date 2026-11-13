@@ -159,6 +159,38 @@
       "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
     },
     {
+      "name": "By owner with a watching note, a post type not yet listed",
+      "setup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "makeEventLeftovers" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [{ "waitFor": ".alo-watching" }],
+      "cleanup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "By owner with a post type card open, What is in it with statuses and titles",
+      "setup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "makeEventLeftovers" }, { "js": "seed.js", "call": "fastForwardObserver" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [
+        { "click": ".alo-card[data-owner=\"leftover-events\"] .alo-review summary" },
+        { "click": ".alo-card[data-owner=\"leftover-events\"] tr[data-item=\"posttype:le_event\"] .alo-sample summary" },
+        { "waitFor": ".alo-card[data-owner=\"leftover-events\"] .alo-titles" }
+      ],
+      "cleanup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
+      "name": "In-place confirm to trash posts and terms, both names to type",
+      "setup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "makeEventLeftovers" }, { "js": "seed.js", "call": "fastForwardObserver" }],
+      "url": "/wp-admin/tools.php?page=axle-leftovers",
+      "steps": [
+        { "click": ".alo-card[data-owner=\"leftover-events\"] .alo-review summary" },
+        { "click": ".alo-card[data-owner=\"leftover-events\"] .alo-check-all" },
+        { "click": ".alo-card[data-owner=\"leftover-events\"] .alo-trash-button" },
+        { "waitFor": "#alo-confirm .alo-typed-name" },
+        { "click": "#alo-confirm .alo-confirm-ok" },
+        { "waitFor": ".alo-confirm-error:not(:empty)" }
+      ],
+      "cleanup": [{ "js": "seed.js", "call": "resetEvents" }, { "js": "seed.js", "call": "resetAll" }]
+    },
+    {
       "name": "Plugins screen: the deactivation warning",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "wp": ["axle-leftovers", "trash", "cron", "lm_cleanup", "--yes"] }],
       "url": "/wp-admin/plugins.php",

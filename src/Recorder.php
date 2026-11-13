@@ -20,6 +20,8 @@ defined( 'ABSPATH' ) || exit;
  * - At runtime: new options, tables, cron hooks, roles, capabilities and meta
  *   keys get a backtrace, and the first frame in a plugin or theme folder names
  *   the owner. Known names are skipped without a backtrace.
+ * - Post types and taxonomies are recorded when they register, by the same
+ *   backtrace, so a deleted plugin's content type has an owner.
  * - Around plugin deletion: a snapshot before and after uninstall.php, and the
  *   code signature, read while the files still exist.
  * - Themes: the code signature of the theme left and the theme switched to, at
@@ -93,6 +95,8 @@ class Recorder implements Service {
 		add_filter( 'query', array( $this, 'query' ) );
 		add_filter( 'schedule_event', array( $this, 'event_scheduled' ) );
 		add_action( 'update_option_' . $wpdb->prefix . 'user_roles', array( $this, 'roles_changed' ), 10, 2 );
+		add_action( 'registered_post_type', array( $this, 'post_type_registered' ), 10, 1 );
+		add_action( 'registered_taxonomy', array( $this, 'taxonomy_registered' ), 10, 1 );
 		foreach ( array( 'post', 'user', 'term', 'comment' ) as $meta_type ) {
 			add_action( "added_{$meta_type}_meta", array( $this, 'meta_added' ), 10, 3 );
 		}
@@ -422,6 +426,24 @@ class Recorder implements Service {
 				$this->runtime( 'cap', (string) $cap );
 			}
 		}
+	}
+
+	/**
+	 * A post type registered; records its owner the first time it is seen.
+	 *
+	 * @param string $post_type Post type.
+	 */
+	public function post_type_registered( $post_type ): void {
+		$this->runtime( 'posttype', (string) $post_type );
+	}
+
+	/**
+	 * A taxonomy registered; records its owner the first time it is seen.
+	 *
+	 * @param string $taxonomy Taxonomy.
+	 */
+	public function taxonomy_registered( $taxonomy ): void {
+		$this->runtime( 'taxonomy', (string) $taxonomy );
 	}
 
 	/**

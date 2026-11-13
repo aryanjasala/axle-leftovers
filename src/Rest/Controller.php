@@ -8,6 +8,9 @@
 namespace AryanX\Axle\Leftovers\Rest;
 
 use AryanX\Axle\Leftovers\Admin\Notices;
+use AryanX\Axle\Leftovers\Content;
+use AryanX\Axle\Leftovers\Messages;
+use AryanX\Axle\Leftovers\Observer;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Service;
 use AryanX\Axle\Leftovers\Settings;
@@ -174,6 +177,35 @@ final class Controller implements Service {
 		);
 		register_rest_route(
 			self::NAMESPACE,
+			'/content',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'content' ),
+				'permission_callback' => array( $this, 'permission' ),
+				'args'                => array(
+					'type' => array(
+						'type'     => 'string',
+						'required' => true,
+						'enum'     => Content::TYPES,
+					),
+					'name' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/observation',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'observation' ),
+				'permission_callback' => array( $this, 'permission' ),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
 			'/notice',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -273,6 +305,32 @@ final class Controller implements Service {
 				'items'    => count( $this->scanner->items() ),
 			)
 		);
+	}
+
+	/**
+	 * GET /content: one post type or taxonomy item with its status counts and example titles.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function content( WP_REST_Request $request ) {
+		$name = (string) $request->get_param( 'name' );
+		$item = $this->scanner->item( (string) $request->get_param( 'type' ), $name );
+		if ( ! $item ) {
+			return new WP_Error( 'axle_leftovers_not_listed', Messages::get( 'not_listed', $name ), array( 'status' => 404 ) );
+		}
+		$item['summary'] = ( new Content() )->summary( $item );
+
+		return new WP_REST_Response( $item );
+	}
+
+	/**
+	 * GET /observation: which kinds of request were watched, and since when.
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function observation(): WP_REST_Response {
+		return new WP_REST_Response( Observer::report() );
 	}
 
 	/**

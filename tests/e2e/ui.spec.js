@@ -70,7 +70,7 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await page.goto( SCREEN );
 		await page.locator( '#contextual-help-link' ).click();
 		const tabs = page.locator( '#contextual-help-wrap .contextual-help-tabs a' );
-		await expect( tabs ).toHaveText( [ 'Overview', 'Owners and evidence', 'Trash and restore', 'Themes', 'Settings and lookups' ] );
+		await expect( tabs ).toHaveText( [ 'Overview', 'Owners and evidence', 'Trash and restore', 'Themes', 'Posts and terms', 'Settings and lookups' ] );
 		await expect( page.locator( '#tab-panel-axle-leftovers-overview' ) ).toContainText( 'Nothing is deleted on the first step' );
 		await tabs.filter( { hasText: 'Themes' } ).click();
 		await expect( page.locator( '#tab-panel-axle-leftovers-themes' ) ).toContainText( 'Widgets that a theme switch left inactive are only reported' );

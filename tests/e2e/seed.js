@@ -140,7 +140,7 @@ function query( sql ) {
 function resetAll() {
 	succeeds( 'plugin', 'deactivate', 'leftover-maker' );
 	removeMakerOutside();
-	const options = [ ...MAKER_OPTIONS, 'redirection_options', 'axle_leftovers_scan', 'axle_leftovers_settings', 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ];
+	const options = [ ...MAKER_OPTIONS, 'redirection_options', 'axle_leftovers_scan', 'axle_leftovers_observed', 'axle_leftovers_settings', 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ];
 	wpEval(
 		'global $wpdb; @unlink( WPMU_PLUGIN_DIR . "/lm-consumer.php" ); @unlink( WPMU_PLUGIN_DIR . "/axle-leftovers-mock-http.php" );' +
 			'foreach ( $wpdb->get_col( "SHOW TABLES" ) as $t ) { if ( preg_match( "/^wp_(lm|axlt|mystery|redirection)_/", $t ) ) { $wpdb->query( "DROP TABLE IF EXISTS `$t`" ); } }' +
@@ -237,6 +237,77 @@ function resetThemes() {
 	);
 }
 
+/** Copies Leftover Events, which registers the le_event post type and the le_genre taxonomy, and activates it. */
+function installEvents() {
+	wpEval(
+		`$copy = function ( $from, $to ) use ( &$copy ) { wp_mkdir_p( $to ); foreach ( scandir( $from ) as $f ) { if ( "." === $f[0] ) { continue; } is_dir( "$from/$f" ) ? $copy( "$from/$f", "$to/$f" ) : copy( "$from/$f", "$to/$f" ); } }; $copy( ${ FIXTURES } . "/leftover-events", WP_PLUGIN_DIR . "/leftover-events" );`
+	);
+	wp( 'plugin', 'activate', 'leftover-events' );
+	wp( 'option', 'get', 'siteurl' ); // The next request registers the types and the ledger sees who did it.
+}
+
+/**
+ * Three events (two published, one draft) with meta, a revision and a comment with meta, two genres,
+ * and one ordinary post that also carries a genre. Returns the IDs by kind. The plugin must be active.
+ */
+function makeEventContent() {
+	return JSON.parse(
+		wpEval(
+			`$ids = array( "events" => array(), "revisions" => array(), "comments" => array(), "terms" => array(), "post" => 0 );
+			$jazz = wp_insert_term( "Jazz", "le_genre" ); $rock = wp_insert_term( "Rock", "le_genre" );
+			$ids["terms"] = array( (int) $jazz["term_id"], (int) $rock["term_id"] );
+			update_term_meta( $ids["terms"][0], "color", "blue" );
+			foreach ( array( array( "Spring Gala", "publish", "2024-03-01 10:00:00" ), array( "Summer Fest", "publish", "2024-06-01 10:00:00" ), array( "Draft Meetup", "draft", "2025-01-01 10:00:00" ) ) as $i => $d ) {
+				$id = wp_insert_post( array( "post_type" => "le_event", "post_title" => $d[0], "post_status" => $d[1], "post_date" => $d[2], "post_date_gmt" => $d[2], "post_content" => "About " . $d[0] ) );
+				update_post_meta( $id, "_le_date", $d[2] );
+				update_post_meta( $id, "_le_venue", "Hall " . $i );
+				wp_set_object_terms( $id, array( $ids["terms"][0] ), "le_genre" );
+				$ids["events"][] = $id;
+			}
+			$ids["revisions"][] = wp_insert_post( array( "post_type" => "revision", "post_status" => "inherit", "post_parent" => $ids["events"][0], "post_name" => $ids["events"][0] . "-revision-v1", "post_title" => "Spring Gala", "post_content" => "older" ) );
+			$c = wp_insert_comment( array( "comment_post_ID" => $ids["events"][0], "comment_author" => "Pat", "comment_author_email" => "pat@example.com", "comment_content" => "Great night" ) );
+			add_comment_meta( $c, "rating", "5" );
+			$ids["comments"][] = $c;
+			$ids["post"] = wp_insert_post( array( "post_title" => "Ordinary post with a genre", "post_status" => "publish" ) );
+			wp_set_object_terms( $ids["post"], array( $ids["terms"][1] ), "le_genre" );
+			echo wp_json_encode( $ids );`
+		)
+	);
+}
+
+/** Installs Leftover Events, lets it create content, and deletes it. Returns the IDs. The observer has only just started watching. */
+function makeEventLeftovers() {
+	installEvents();
+	const ids = makeEventContent();
+	wp( 'plugin', 'deactivate', 'leftover-events' );
+	wp( 'plugin', 'delete', 'leftover-events' );
+	wp( 'axle-leftovers', 'scan' );
+	return ids;
+}
+
+/** Moves the observation record back in time, as if the kinds of request had been watched for 20 days and the types last registered 12 days ago. */
+function fastForwardObserver() {
+	wpEval(
+		'$d = DAY_IN_SECONDS; $t = time(); $s = get_option( "axle_leftovers_observed", array() ); $s = is_array( $s ) ? $s : array();' +
+			'$s["since"] = $t - 20 * $d; $s["kinds"] = array( "front" => array( "first" => $t - 20 * $d, "last" => $t ), "admin" => array( "first" => $t - 20 * $d, "last" => $t ) );' +
+			'$s["post_types"]["le_event"] = $t - 12 * $d; $s["taxonomies"]["le_genre"] = $t - 12 * $d; update_option( "axle_leftovers_observed", $s, true );'
+	);
+	wp( 'axle-leftovers', 'scan' );
+}
+
+/** Puts the site back after the event specs: no fixture plugin, no events, genres or ordinary posts they made. */
+function resetEvents() {
+	succeeds( 'plugin', 'deactivate', 'leftover-events' );
+	shell( 'rm', '-rf', '/var/www/html/wp-content/plugins/leftover-events' );
+	wpEval(
+		'global $wpdb; $ids = $wpdb->get_col( "SELECT ID FROM {$wpdb->posts} WHERE post_type = \'le_event\' OR post_title = \'Ordinary post with a genre\' OR ( post_type = \'revision\' AND post_name LIKE \'%-revision-v1\' AND post_content = \'older\' )" );' +
+			'foreach ( $ids as $id ) { $wpdb->delete( $wpdb->postmeta, array( "post_id" => $id ) ); $wpdb->delete( $wpdb->term_relationships, array( "object_id" => $id ) ); $wpdb->delete( $wpdb->posts, array( "ID" => $id ) ); }' +
+			'foreach ( $wpdb->get_col( "SELECT comment_ID FROM {$wpdb->comments} WHERE comment_author_email = \'pat@example.com\'" ) as $c ) { $wpdb->delete( $wpdb->commentmeta, array( "comment_id" => $c ) ); $wpdb->delete( $wpdb->comments, array( "comment_ID" => $c ) ); }' +
+			'foreach ( $wpdb->get_results( "SELECT term_taxonomy_id, term_id FROM {$wpdb->term_taxonomy} WHERE taxonomy = \'le_genre\'" ) as $r ) { $wpdb->delete( $wpdb->term_relationships, array( "term_taxonomy_id" => $r->term_taxonomy_id ) ); $wpdb->delete( $wpdb->term_taxonomy, array( "term_taxonomy_id" => $r->term_taxonomy_id ) ); $wpdb->delete( $wpdb->termmeta, array( "term_id" => $r->term_id ) ); $wpdb->delete( $wpdb->terms, array( "term_id" => $r->term_id ) ); }' +
+			'delete_option( "axle_leftovers_observed" ); wp_cache_flush();'
+	);
+}
+
 /** Everything the screenshots and the demo show. */
 function seedScreens() {
 	resetAll();
@@ -274,6 +345,11 @@ module.exports = {
 	makeThemeContent,
 	makeThemeLeftovers,
 	resetThemes,
+	installEvents,
+	makeEventContent,
+	makeEventLeftovers,
+	fastForwardObserver,
+	resetEvents,
 	tables,
 	checksum,
 	query,

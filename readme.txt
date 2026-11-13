@@ -45,9 +45,11 @@ Data of an installed plugin or theme, active or not, is never listed. Core table
 
 = What it finds =
 
-Tables, options and transients, cron events, post, user, term and comment meta keys, top-level uploads folders, roles, and capabilities on roles. Each item shows rows, size and whether it is autoloaded, so you see what a deleted plugin still costs every page load.
+Tables, options and transients, cron events, post, user, term and comment meta keys, top-level uploads folders, roles, capabilities on roles, and the posts and terms of post types and taxonomies nothing registers any more. Each item shows rows, size and whether it is autoloaded, so you see what a deleted plugin still costs every page load.
 
 For a deleted theme: its Customizer settings, its options, transients, cron events and meta keys, and on block themes the templates, template parts, global styles and custom CSS you saved. They are listed under the theme's name, with the same evidence, the same trash and the same restore. Nothing of the active theme, its parent or any installed theme is ever listed. Widgets that a theme switch left inactive are only reported.
+
+For a deleted plugin's post types and taxonomies: the posts, with their meta, comments, revisions and term links, and the terms, that nothing registers any more. The events plugin is long gone and 4,000 `event` posts still sit in `wp_posts`, invisible in wp-admin. Leftovers lists them with counts per status, the dates and a few example titles, so you can tell what they are, and moves them to the trash in batches. A restore brings back the same IDs.
 
 On multisite, each site lists its own leftovers. Network options, user meta and the main site's tables are listed in Network Admin.
 
@@ -61,6 +63,7 @@ On multisite, each site lists its own leftovers. Network options, user meta and 
 * `wp axle-leftovers restore <batch-id|item-id>`
 * `wp axle-leftovers trash list` and `wp axle-leftovers trash purge [--older-than=<days>] [--yes]`
 * `wp axle-leftovers ledger list` and `wp axle-leftovers ledger show <slug>`
+* `wp axle-leftovers observe [<type> <name>]`
 * `wp axle-leftovers settings [list|get <key>|set <key> <value>]`
 
 = For developers =
@@ -69,7 +72,7 @@ Every default, list, limit and message has a filter, and every scan, trash, rest
 
 = Privacy =
 
-Trashed rows and exports can hold personal data, such as form entries in a plugin's table or user settings in user meta. They stay in a folder the web server does not serve, are downloaded only by administrators, and are deleted with the trash after 30 days. The plugin adds suggested text to Settings > Privacy and takes part in Tools > Export Personal Data and Erase Personal Data: erasing a user deletes the trashed batches that hold their meta.
+Trashed rows and exports can hold personal data, such as form entries in a plugin's table, user settings in user meta, or the posts and comments of a removed post type, with commenters' names and email addresses. They stay in a folder the web server does not serve, are downloaded only by administrators, and are deleted with the trash after 30 days. The plugin adds suggested text to Settings > Privacy and takes part in Tools > Export Personal Data and Erase Personal Data: erasing a user deletes the trashed batches that hold their meta.
 
 == Frequently Asked Questions ==
 
@@ -79,7 +82,7 @@ No. Trashing renames tables and moves rows and folders. Only purging deletes, af
 
 = What if the owner is wrong? =
 
-Each item shows its evidence, and Guess and Unknown items need the name typed before they move. If something breaks after a trash, restore the batch from the Trash tab or with `wp axle-leftovers restore <batch>`.
+Each item shows its evidence, and Guess and Unknown items need the name typed before they move. Posts and terms always need the name typed. If something breaks after a trash, restore the batch from the Trash tab or with `wp axle-leftovers restore <batch>`.
 
 = What happens when I uninstall Leftovers? =
 
@@ -88,6 +91,14 @@ Its own tables, settings and folder are removed. Items still in its trash are pu
 = Does it clean up after themes too? =
 
 Yes. When you switch or delete a theme, Leftovers reads its code and records it. What a deleted theme leaves is listed under its name: the `theme_mods_` option, options and transients its code used, cron events, meta keys, and on block themes the templates, template parts, global styles and custom CSS. Trashing them exports every post with its revisions, meta and term relationships, and restoring puts the same rows back with the same IDs. Widgets that are inactive after a theme switch are only reported, and never moved.
+
+= How does it know a post type is gone? =
+
+Post types register on `init`, and some register only in wp-admin, in REST or on some pages. So Leftovers watches which types register, and on which kind of request, and says "not registered in the last 7 days" instead of "never". A type is listed only after no code registered it for that long, and front end and wp-admin requests were both watched the whole time. The period is a setting (1 to 365 days). Types that nothing registers yet but that were not watched long enough are reported, with the day they can be listed. Run `wp axle-leftovers observe` to see where it stands.
+
+= Is it safe to move 4,000 posts? =
+
+Everything is exported to a file first, then moved in batches, and the trash keeps it for 30 days. Restore puts the posts, meta, comments and term links back with the same IDs, and refuses when an ID has been taken since. Attachments (media) are not moved. A web request moves at most 100,000 rows in one item; WP-CLI has no limit.
 
 = Does it send anything anywhere? =
 

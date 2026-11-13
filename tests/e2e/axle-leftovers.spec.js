@@ -356,7 +356,7 @@ test.describe( 'Axle Leftovers', () => {
 		await page.getByLabel( 'Keep export files when the trash is purged' ).check();
 		await page.getByRole( 'button', { name: 'Save settings' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Settings saved.' );
-		expect( JSON.parse( wp( 'option', 'get', 'axle_leftovers_settings', '--format=json' ) ) ).toEqual( { retention_days: 7, export_max_mb: 50, keep_exports: true, runtime_ledger: true, track_meta_keys: false, online_lookup: false, remote_dataset: false } );
+		expect( JSON.parse( wp( 'option', 'get', 'axle_leftovers_settings', '--format=json' ) ) ).toEqual( { retention_days: 7, export_max_mb: 50, keep_exports: true, runtime_ledger: true, track_meta_keys: false, online_lookup: false, remote_dataset: false, observe_days: 7 } );
 		await expect( page.getByLabel( 'Keep trashed items for' ) ).toHaveValue( '7' );
 	} );
 

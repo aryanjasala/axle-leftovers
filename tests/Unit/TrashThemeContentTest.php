@@ -189,6 +189,9 @@ final class TrashThemeContentTest extends LeftoversTestCase {
 
 		Functions\when( 'wp_get_themes' )->justReturn( array() );
 		Functions\when( 'update_option' )->justReturn( true );
+		Functions\when( 'wp_cache_delete' )->justReturn( true );
+		Functions\when( 'taxonomy_exists' )->justReturn( true );
+		Functions\when( 'wp_update_term_count_now' )->justReturn( true );
 		Functions\when( 'get_term_by' )->alias(
 			static function ( $field, $slug, $taxonomy ) {
 				$ids = array( 'wp_theme:old-theme' => 5, 'wp_template_part_area:header' => 7 );

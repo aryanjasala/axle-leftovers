@@ -110,6 +110,8 @@ final class Abilities implements Service {
 				'rows'       => array( 'type' => 'integer' ),
 				'bytes'      => array( 'type' => 'integer' ),
 				'autoload'   => array( 'type' => 'boolean' ),
+				'detail'     => array( 'type' => 'object' ),
+				'summary'    => array( 'type' => 'object' ),
 				'refs'       => array( 'type' => 'array' ),
 			),
 		);
@@ -136,7 +138,7 @@ final class Abilities implements Service {
 		$this->ability(
 			'list-leftovers',
 			__( 'List leftovers', 'axle-leftovers' ),
-			__( 'Tables, options, cron events, meta keys, uploads folders, roles, capabilities, and the settings, templates, global styles and custom CSS of deleted themes, left by deleted plugins and themes, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), theme folder name, owner kind (plugin or theme), type or confidence.', 'axle-leftovers' ),
+			__( 'Tables, options, cron events, meta keys, uploads folders, roles, capabilities, the settings, templates, global styles and custom CSS of deleted themes, and the posts and terms of post types and taxonomies nothing registers any more, left by deleted plugins and themes, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), theme folder name, owner kind (plugin or theme), type or confidence.', 'axle-leftovers' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -173,7 +175,7 @@ final class Abilities implements Service {
 		$this->ability(
 			'get-item',
 			__( 'Get one leftover', 'axle-leftovers' ),
-			__( 'One listed item with its evidence, size and reference check result.', 'axle-leftovers' ),
+			__( 'One listed item with its evidence, size and reference check result. For a post type or taxonomy it also holds a summary: counts per status, dates, meta, comments and relationships, and example titles.', 'axle-leftovers' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -188,6 +190,35 @@ final class Abilities implements Service {
 			),
 			$item,
 			array( $this, 'get_item' ),
+			$permission,
+			array(
+				'readonly'   => true,
+				'idempotent' => true,
+			)
+		);
+
+		$this->ability(
+			'get-observation',
+			__( 'Get the observation record', 'axle-leftovers' ),
+			__( 'Which kinds of request (front end, admin, REST, cron, AJAX, WP-CLI) Leftovers has watched for registered post types and taxonomies, since when, and when a type that nothing registers can first be listed.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'days'       => array( 'type' => 'integer' ),
+					'since'      => array( 'type' => 'string' ),
+					'kinds'      => array( 'type' => 'array' ),
+					'post_types' => array( 'type' => 'integer' ),
+					'taxonomies' => array( 'type' => 'integer' ),
+					'ready'      => array( 'type' => 'string' ),
+				),
+			),
+			array( $this, 'get_observation' ),
 			$permission,
 			array(
 				'readonly'   => true,
@@ -217,7 +248,7 @@ final class Abilities implements Service {
 		$this->ability(
 			'trash-items',
 			__( 'Move leftovers to the trash', 'axle-leftovers' ),
-			__( 'Exports, then moves the items to the trash as one batch. Refuses items in use, items active code references, and Guess or Unknown items unless each name is repeated in confirm_names.', 'axle-leftovers' ),
+			__( 'Exports, then moves the items to the trash as one batch. Refuses items in use, items active code references, and Guess or Unknown items unless each name is repeated in confirm_names. Posts of a post type and terms of a taxonomy always need their name repeated in confirm_names, and are refused until the type has gone unregistered for the observation period.', 'axle-leftovers' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
@@ -414,6 +445,11 @@ final class Abilities implements Service {
 				'track_meta_keys' => array( 'type' => 'boolean' ),
 				'online_lookup'   => array( 'type' => 'boolean' ),
 				'remote_dataset'  => array( 'type' => 'boolean' ),
+				'observe_days'    => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 365,
+				),
 			),
 			'additionalProperties' => false,
 		);
@@ -601,7 +637,23 @@ final class Abilities implements Service {
 		$input = (array) $input;
 		$item  = $this->scanner->item( (string) ( $input['type'] ?? '' ), (string) ( $input['name'] ?? '' ) );
 
-		return $item ? $item : new WP_Error( 'axle_leftovers_not_listed', Messages::get( 'not_listed', (string) ( $input['name'] ?? '' ) ), array( 'status' => 404 ) );
+		if ( ! $item ) {
+			return new WP_Error( 'axle_leftovers_not_listed', Messages::get( 'not_listed', (string) ( $input['name'] ?? '' ) ), array( 'status' => 404 ) );
+		}
+		if ( Content::is_content_type( (string) $item['type'] ) ) {
+			$item['summary'] = ( new Content() )->summary( $item );
+		}
+
+		return $item;
+	}
+
+	/**
+	 * What the observer has seen.
+	 *
+	 * @return array
+	 */
+	public function get_observation(): array {
+		return Observer::report();
 	}
 
 	/**

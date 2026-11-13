@@ -30,6 +30,11 @@ class FakeWpdb {
 	public $usermeta    = 'wp_usermeta';
 	public $termmeta    = 'wp_termmeta';
 	public $commentmeta = 'wp_commentmeta';
+	public $comments    = 'wp_comments';
+	public $posts       = 'wp_posts';
+	public $terms       = 'wp_terms';
+	public $term_taxonomy      = 'wp_term_taxonomy';
+	public $term_relationships = 'wp_term_relationships';
 	public $sitemeta    = 'wp_sitemeta';
 	public $insert_id   = 0;
 

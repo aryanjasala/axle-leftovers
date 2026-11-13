@@ -25,12 +25,13 @@ final class Settings {
 		'track_meta_keys' => true,
 		'online_lookup'   => false,
 		'remote_dataset'  => false,
+		'observe_days'    => 7,
 	);
 
 	/**
 	 * The stored settings merged over the defaults.
 	 *
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int}
 	 */
 	public static function all(): array {
 		$stored = get_option( self::OPTION, array() );
@@ -43,7 +44,7 @@ final class Settings {
 	 * Cleans submitted or stored settings.
 	 *
 	 * @param array $input Raw values.
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int}
 	 */
 	public static function sanitize( array $input ): array {
 		return array(
@@ -54,6 +55,7 @@ final class Settings {
 			'track_meta_keys' => ! empty( $input['track_meta_keys'] ),
 			'online_lookup'   => ! empty( $input['online_lookup'] ),
 			'remote_dataset'  => ! empty( $input['remote_dataset'] ),
+			'observe_days'    => max( 1, min( 365, (int) ( $input['observe_days'] ?? self::DEFAULTS['observe_days'] ) ) ),
 		);
 	}
 
@@ -70,7 +72,7 @@ final class Settings {
 		/**
 		 * Fires after the settings are saved, from the screen, WP-CLI or an ability.
 		 *
-		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset.
+		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset, observe_days.
 		 * @param array $old The settings before.
 		 */
 		do_action( 'axle_leftovers_settings_saved', $new, $old );
@@ -113,6 +115,8 @@ final class Settings {
 			'role'         => 'promote_users',
 			'cap'          => 'promote_users',
 			'usermeta'     => 'edit_users',
+			'posttype'     => 'delete_others_posts',
+			'taxonomy'     => 'manage_categories',
 		);
 		$cap   = $extra[ $type ] ?? self::capability( 'sitemeta' === $type );
 
@@ -278,6 +282,74 @@ final class Settings {
 	}
 
 	/**
+	 * Days a post type or taxonomy must go unregistered before it is listed.
+	 *
+	 * @return int
+	 */
+	public static function observe_days(): int {
+		/**
+		 * Filters how many days a post type or taxonomy must have gone
+		 * unregistered, on every kind of request that is watched, before
+		 * Leftovers calls it unregistered and lists its content.
+		 *
+		 * @param int $days Days, 1 to 365. Default from the settings, 7.
+		 */
+		return max( 1, min( 365, (int) apply_filters( 'axle_leftovers_observe_days', self::all()['observe_days'] ) ) );
+	}
+
+	/**
+	 * Request kinds that must have been watched for the whole observation period.
+	 *
+	 * @return string[]
+	 */
+	public static function observe_kinds(): array {
+		$default = array( 'front', 'admin' );
+
+		/**
+		 * Filters the kinds of request that must have been watched for the whole
+		 * observation period before a post type or taxonomy counts as unregistered.
+		 *
+		 * @param string[] $kinds Any of front, admin, rest, cron, ajax, cli. Default front and admin.
+		 */
+		$filtered = (array) apply_filters( 'axle_leftovers_observe_kinds', $default );
+		$kinds    = array_values( array_intersect( array( 'front', 'admin', 'rest', 'cron', 'ajax', 'cli' ), array_map( 'strval', $filtered ) ) );
+
+		return $kinds ? $kinds : $default;
+	}
+
+	/**
+	 * Most posts or terms a content item may hold to be moved from the screen or REST.
+	 *
+	 * @return int 0 for no limit.
+	 */
+	public static function content_max_rows(): int {
+		/**
+		 * Filters the most posts or terms one item may hold to be moved to the trash
+		 * in a web request. A bigger item has to go through WP-CLI, which has no
+		 * time limit. Use 0 for no limit.
+		 *
+		 * @param int $rows Rows, 0 or 1000 and up. Default 100000.
+		 */
+		$rows = (int) apply_filters( 'axle_leftovers_content_max_rows', 100000 );
+
+		return $rows < 1 ? 0 : max( 1000, $rows );
+	}
+
+	/**
+	 * Titles shown to help a person recognise a post type or taxonomy.
+	 *
+	 * @return int
+	 */
+	public static function sample_size(): int {
+		/**
+		 * Filters how many example titles are shown for a post type or taxonomy.
+		 *
+		 * @param int $size Titles, 1 to 20. Default 5.
+		 */
+		return max( 1, min( 20, (int) apply_filters( 'axle_leftovers_sample_size', 5 ) ) );
+	}
+
+	/**
 	 * Meta rows copied, deleted or re-inserted per query.
 	 *
 	 * @return int
@@ -375,6 +447,8 @@ final class Settings {
 			'template'     => __( 'Theme templates', 'axle-leftovers' ),
 			'globalstyles' => __( 'Theme global styles', 'axle-leftovers' ),
 			'customcss'    => __( 'Theme custom CSS', 'axle-leftovers' ),
+			'posttype'     => __( 'Post type content', 'axle-leftovers' ),
+			'taxonomy'     => __( 'Taxonomy terms', 'axle-leftovers' ),
 			'role'         => __( 'Role', 'axle-leftovers' ),
 			'cap'          => __( 'Capability', 'axle-leftovers' ),
 			'sitemeta'     => __( 'Network option', 'axle-leftovers' ),

@@ -129,6 +129,7 @@ final class Plugin {
 
 		$services = array(
 			$this->recorder,
+			new Observer(),
 			new Cron( $this->scanner, $this->trash ),
 			new Page( $this->scanner, $this->trash, $this->ledger, $this->recorder ),
 			new Notices( $this->scanner, $this->trash ),
