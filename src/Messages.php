@@ -36,6 +36,14 @@ final class Messages {
 			'item_cap'           => __( 'You are not allowed to change %s.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
 			'confirm'            => __( 'Type the name %s to confirm. The owner is not certain.', 'axle-leftovers' ),
+			/* translators: %s: item name. */
+			'confirm_content'    => __( 'Type the name %s to confirm. This moves posts or terms, not only settings.', 'axle-leftovers' ),
+			/* translators: %s: item name. */
+			'registered'         => __( '%s is registered by active code now, so it is not unregistered. Scan again.', 'axle-leftovers' ),
+			/* translators: 1: item name, 2: number of days. */
+			'watching'           => __( '%1$s has not been watched for %2$s days yet. It may be registered only on some requests.', 'axle-leftovers' ),
+			/* translators: 1: item name, 2: number of rows, 3: limit. */
+			'too_big'            => __( '%1$s holds %2$s rows, more than the limit of %3$s for one web request. Use WP-CLI to move it: wp axle-leftovers trash.', 'axle-leftovers' ),
 			/* translators: 1: role, 2: user logins. */
 			'role_users'         => __( 'Users still have the role %1$s: %2$s. Change their role first.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: file paths. */

@@ -73,7 +73,7 @@ class Ledger {
 			/**
 			 * Filters a plugin's code signature before it is stored in the ledger.
 			 *
-			 * @param array  $signature Key => names: t tables, o options, c cron, m meta, r roles and caps, u uploads, p prefixes, n uninstall.php names.
+			 * @param array  $signature Key => names: t tables, o options, c cron, m meta, r roles and caps, u uploads, p prefixes, n uninstall.php names, y post types, x taxonomies.
 			 * @param string $slug      Plugin slug.
 			 * @param string $version   Plugin version.
 			 */

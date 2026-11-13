@@ -119,6 +119,8 @@ class Attribution {
 			'role'        => 'r',
 			'cap'         => 'r',
 			'folder'      => 'u',
+			'posttype'    => 'y',
+			'taxonomy'    => 'x',
 		);
 
 		return $keys[ $type ] ?? 'o';

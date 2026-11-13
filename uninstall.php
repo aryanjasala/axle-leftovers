@@ -37,6 +37,7 @@ function axle_leftovers_uninstall_site(): void {
 	wp_clear_scheduled_hook( 'axle_leftovers_scan_step' );
 	delete_option( 'axle_leftovers_settings' );
 	delete_option( 'axle_leftovers_scan' );
+	delete_option( 'axle_leftovers_observed' );
 	delete_option( 'axle_leftovers_db_version' );
 	delete_option( 'axle_leftovers_lookups' );
 	delete_option( 'axle_leftovers_dataset_meta' );

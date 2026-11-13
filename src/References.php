@@ -95,23 +95,40 @@ class References {
 	}
 
 	/**
+	 * A pattern for code that registers a post type or taxonomy under this name.
+	 *
+	 * @param string $type posttype or taxonomy.
+	 * @param string $name Slug.
+	 * @return string Regular expression.
+	 */
+	public static function registration_pattern( string $type, string $name ): string {
+		$function = 'taxonomy' === $type ? 'register_taxonomy' : 'register_post_type';
+
+		return '/' . $function . '\\s*\\(\\s*[\'"]' . preg_quote( $name, '/' ) . '[\'"]/';
+	}
+
+	/**
 	 * Finds code that uses any of the items.
 	 *
 	 * @param array<int, array{type: string, name: string}> $items Items.
 	 * @return array<string, string[]> "type:name" => files (relative to wp-content) that use it.
 	 */
 	public function check( array $items ): array {
-		$needles = array();
-		$hits    = array();
+		$needles  = array();
+		$patterns = array();
+		$hits     = array();
 		foreach ( $items as $item ) {
 			$id          = $item['type'] . ':' . $item['name'];
 			$hits[ $id ] = array();
 			// Theme content is named by a folder, which code mentions for other reasons; the theme itself is not installed.
-			if ( ! Themes::is_content_type( (string) $item['type'] ) ) {
+			if ( Content::is_content_type( (string) $item['type'] ) ) {
+				// A post type is named in code for many reasons ('event' is in half the plugins), so only a registration counts.
+				$patterns[ $id ] = self::registration_pattern( (string) $item['type'], (string) $item['name'] );
+			} elseif ( ! Themes::is_content_type( (string) $item['type'] ) ) {
 				$needles[ $id ] = self::needles( (string) $item['type'], (string) $item['name'] );
 			}
 		}
-		if ( ! $needles ) {
+		if ( ! $needles && ! $patterns ) {
 			return $hits;
 		}
 
@@ -127,6 +144,12 @@ class References {
 			}
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents, WordPressVIPMinimum.Performance.FetchingRemoteData.FileGetContentsUnknown -- A local PHP file of an active plugin or theme.
 			$source = (string) file_get_contents( $file );
+			foreach ( $patterns as $id => $pattern ) {
+				if ( count( $hits[ $id ] ) < 3 && preg_match( $pattern, $source ) ) {
+					$path          = wp_normalize_path( $file );
+					$hits[ $id ][] = 0 === strpos( $path, $content ) ? substr( $path, strlen( $content ) ) : $path;
+				}
+			}
 			foreach ( $needles as $id => $list ) {
 				if ( count( $hits[ $id ] ) >= 3 ) {
 					continue;

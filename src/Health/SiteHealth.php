@@ -61,7 +61,58 @@ final class SiteHealth implements Service {
 			'test'  => array( $this, 'test_autoload' ),
 		);
 
+		$tests['direct']['axle_leftovers_content'] = array(
+			'label' => __( 'No posts are left from removed post types', 'axle-leftovers' ),
+			'test'  => array( $this, 'test_content' ),
+		);
+
 		return $tests;
+	}
+
+	/**
+	 * Posts and terms of post types and taxonomies nothing registers any more.
+	 *
+	 * @return array
+	 */
+	public function test_content(): array {
+		$posts = 0;
+		$terms = 0;
+		foreach ( $this->scanner->items( array( 'scope' => 'site' ) ) as $item ) {
+			if ( 'posttype' === $item['type'] ) {
+				$posts += (int) $item['rows'];
+			} elseif ( 'taxonomy' === $item['type'] ) {
+				$terms += (int) $item['rows'];
+			}
+		}
+
+		$result = array(
+			'label'       => __( 'No posts are left from removed post types', 'axle-leftovers' ),
+			'status'      => 'good',
+			'badge'       => array(
+				'label' => __( 'Performance', 'axle-leftovers' ),
+				'color' => 'blue',
+			),
+			'description' => '<p>' . esc_html__( 'Every post type and taxonomy in the database is registered by something installed.', 'axle-leftovers' ) . '</p>',
+			'actions'     => '',
+			'test'        => 'axle_leftovers_content',
+		);
+
+		/**
+		 * Filters how many posts or terms of unregistered post types and taxonomies make the Site Health test "recommended".
+		 *
+		 * @param int $threshold Rows. Default 1.
+		 */
+		$threshold = max( 1, (int) apply_filters( 'axle_leftovers_content_health_threshold', 1 ) );
+		if ( $posts + $terms >= $threshold ) {
+			/* translators: 1: number of posts, 2: number of terms. */
+			$result['label']          = sprintf( __( '%1$s posts and %2$s terms belong to post types and taxonomies nothing registers any more', 'axle-leftovers' ), number_format_i18n( $posts ), number_format_i18n( $terms ) );
+			$result['status']         = 'recommended';
+			$result['badge']['color'] = 'orange';
+			$result['description']    = '<p>' . esc_html__( 'They sit in the database, invisible in wp-admin, and slow down exports, backups and some queries. Leftovers shows what is in them and moves them to a trash you can restore from.', 'axle-leftovers' ) . '</p>';
+			$result['actions']        = '<p><a href="' . esc_url( Page::url() ) . '">' . esc_html__( 'Review them in Tools > Leftovers', 'axle-leftovers' ) . '</a></p>';
+		}
+
+		return $result;
 	}
 
 	/**

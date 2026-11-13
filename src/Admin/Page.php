@@ -7,11 +7,13 @@
 
 namespace AryanX\Axle\Leftovers\Admin;
 
+use AryanX\Axle\Leftovers\Content;
 use AryanX\Axle\Leftovers\Dataset;
 use AryanX\Axle\Leftovers\DatasetUpdater;
 use AryanX\Axle\Leftovers\Ledger;
 use AryanX\Axle\Leftovers\Lookup;
 use AryanX\Axle\Leftovers\Messages;
+use AryanX\Axle\Leftovers\Observer;
 use AryanX\Axle\Leftovers\Recorder;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Service;
@@ -173,7 +175,7 @@ final class Page implements Service {
 				array(
 					'id'      => 'overview',
 					'title'   => __( 'Overview', 'axle-leftovers' ),
-					'content' => '<p>' . esc_html__( 'Deleting a plugin or a theme does not always clean up after it. Leftovers lists the tables, options, cron events, meta, roles, uploads folders and theme settings that nothing installed owns any more, and says who they belonged to and how sure it is.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Nothing is deleted on the first step. Items go to a trash and come back with one click.', 'axle-leftovers' ) . '</p>',
+					'content' => '<p>' . esc_html__( 'Deleting a plugin or a theme does not always clean up after it. Leftovers lists the tables, options, cron events, meta, roles, uploads folders, theme settings and the posts and terms of removed post types that nothing installed owns any more, and says who they belonged to and how sure it is.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Nothing is deleted on the first step. Items go to a trash and come back with one click.', 'axle-leftovers' ) . '</p>',
 				),
 				array(
 					'id'      => 'evidence',
@@ -189,6 +191,11 @@ final class Page implements Service {
 					'id'      => 'themes',
 					'title'   => __( 'Themes', 'axle-leftovers' ),
 					'content' => '<p>' . esc_html__( 'A deleted theme leaves its Customizer settings, its options, and on block themes the templates, template parts, global styles and custom CSS you saved. Leftovers lists them under the theme name.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Anything of the active theme, its parent or any installed theme is never listed. Widgets that a theme switch left inactive are only reported.', 'axle-leftovers' ) . '</p>',
+				),
+				array(
+					'id'      => 'content',
+					'title'   => __( 'Posts and terms', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'A plugin that registered its own post type or taxonomy and was deleted can leave thousands of posts and terms in the database, invisible in wp-admin. Leftovers lists them once no code has registered the type for the watch period, 7 days by default.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Some types register only in wp-admin, in REST or on some pages, so Leftovers watches several kinds of request before it calls a type unregistered. Open What is in it to see counts per status and example titles. Moving posts or terms to the trash always needs the name typed. They come back with the same IDs, meta, comments and term links.', 'axle-leftovers' ) . '</p>',
 				),
 				array(
 					'id'      => 'settings',
@@ -249,7 +256,7 @@ final class Page implements Service {
 					'trashTitle'  => __( 'Move to the trash?', 'axle-leftovers' ),
 					'trashOk'     => __( 'Move to trash', 'axle-leftovers' ),
 					'deleteTitle' => __( 'Delete for good?', 'axle-leftovers' ),
-					'typeName'    => __( 'The owner of these items is not certain. Type each name to confirm:', 'axle-leftovers' ),
+					'typeName'    => __( 'Type each name to confirm. This is needed when the owner is not certain, and always for posts and terms:', 'axle-leftovers' ),
 					'nothing'     => __( 'Pick at least one item.', 'axle-leftovers' ),
 					'mismatch'    => __( 'The typed name does not match. Check it and try again.', 'axle-leftovers' ),
 					/* translators: %s: item name. */
@@ -338,6 +345,9 @@ final class Page implements Service {
 
 		if ( ! $network && 'plugins' === $tab ) {
 			$this->render_steps( $state );
+		}
+		if ( ! $network && in_array( $tab, array( 'plugins', 'unknown' ), true ) ) {
+			$this->render_watching( $state );
 		}
 
 		echo '<div class="axle-toolbar alo-status">';
@@ -554,6 +564,29 @@ final class Page implements Service {
 	}
 
 	/**
+	 * A note about post types and taxonomies that nothing registers now but that have not
+	 * been watched long enough to list. Leftovers says when each can be listed.
+	 *
+	 * @param array $state Scan state.
+	 */
+	private function render_watching( array $state ): void {
+		$watching = (array) ( $state['watching'] ?? array() );
+		if ( ! $watching || ! current_user_can( Settings::item_capability( 'posttype' ) ) ) {
+			return;
+		}
+
+		$names = array();
+		foreach ( array_slice( $watching, 0, 5 ) as $entry ) {
+			$ready = strtotime( (string) $entry['ready'] . ' UTC' );
+			/* translators: 1: post type or taxonomy slug, 2: number of rows, 3: time until it can be listed, such as "3 days". */
+			$names[] = sprintf( __( '%1$s (%2$s rows, can be listed in %3$s)', 'axle-leftovers' ), (string) $entry['name'], number_format_i18n( (int) $entry['rows'] ), $ready && $ready > time() ? human_time_diff( time(), $ready ) : __( 'a moment', 'axle-leftovers' ) );
+		}
+		/* translators: 1: number of types, 2: number of days, 3: list of names. */
+		$text = sprintf( _n( '%1$s post type or taxonomy is not registered right now, but Leftovers has not watched for %2$s days yet, so it is not listed. Some types register only in wp-admin, in REST or on some pages. %3$s', '%1$s post types or taxonomies are not registered right now, but Leftovers has not watched for %2$s days yet, so they are not listed. Some types register only in wp-admin, in REST or on some pages. %3$s', count( $watching ), 'axle-leftovers' ), number_format_i18n( count( $watching ) ), number_format_i18n( Observer::report()['days'] ), implode( ', ', $names ) . '.' );
+		echo '<div class="notice notice-info inline alo-watching"><p>' . esc_html( $text ) . '</p></div>';
+	}
+
+	/**
 	 * A note about widgets a theme switch left inactive. Report only: Leftovers never touches widgets.
 	 */
 	private function render_inactive_widgets(): void {
@@ -605,6 +638,7 @@ final class Page implements Service {
 	 */
 	private function items_form( array $items, bool $network, string $id ): void {
 		$unknown = 'alo-unknown' === $id;
+		$content = new Content();
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-trash-form">';
 		$this->hidden( 'trash', $network );
 		echo '<input type="hidden" name="tab" value="' . esc_attr( 'alo-unknown' === $id ? 'unknown' : '' ) . '">';
@@ -621,7 +655,7 @@ final class Page implements Service {
 		echo '</tr></thead><tbody>';
 		foreach ( $items as $index => $item ) {
 			$box     = $id . '-' . $index;
-			$typed   = Settings::require_typed_confirmation( $item['confidence'] );
+			$typed   = Settings::require_typed_confirmation( $item['confidence'] ) || Content::is_content_type( (string) $item['type'] );
 			$blocked = ! empty( $item['refs'] );
 			echo '<tr data-item="' . esc_attr( $item['id'] ) . '">';
 			echo '<th scope="row" class="check-column">';
@@ -635,6 +669,9 @@ final class Page implements Service {
 			);
 			echo '</th>';
 			echo '<td><label for="' . esc_attr( $box ) . '"><code>' . esc_html( $item['name'] ) . '</code></label><br><span class="axle-muted alo-type">' . esc_html( Display::type( $item['type'] ) ) . '</span>';
+			if ( Content::is_content_type( (string) $item['type'] ) ) {
+				echo Display::content_summary( $item, $content->summary( $item ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
+			}
 			if ( ! empty( $item['autoload'] ) ) {
 				echo ' <span class="axle-badge axle-badge--neutral alo-autoload">' . esc_html__( 'Autoloaded', 'axle-leftovers' ) . '</span>';
 			}
@@ -878,6 +915,7 @@ final class Page implements Service {
 		echo '<table class="form-table" role="presentation"><tbody>';
 		echo '<tr><th scope="row"><label for="alo-retention">' . esc_html__( 'Keep trashed items for', 'axle-leftovers' ) . '</label></th><td><input type="number" min="1" max="3650" id="alo-retention" name="retention_days" value="' . esc_attr( (string) $settings['retention_days'] ) . '" class="small-text" aria-describedby="alo-retention-help"> ' . esc_html__( 'days', 'axle-leftovers' ) . '<p class="description" id="alo-retention-help">' . esc_html__( 'The daily cron deletes them after this.', 'axle-leftovers' ) . '</p></td></tr>';
 		echo '<tr><th scope="row"><label for="alo-export-max">' . esc_html__( 'Largest table to export', 'axle-leftovers' ) . '</label></th><td><input type="number" min="0" id="alo-export-max" name="export_max_mb" value="' . esc_attr( (string) $settings['export_max_mb'] ) . '" class="small-text" aria-describedby="alo-export-help"> MB<p class="description" id="alo-export-help">' . esc_html__( 'Bigger tables are only renamed, with a warning. The data stays in the database either way.', 'axle-leftovers' ) . '</p></td></tr>';
+		echo '<tr><th scope="row"><label for="alo-observe">' . esc_html__( 'Watch post types for', 'axle-leftovers' ) . '</label></th><td><input type="number" min="1" max="365" id="alo-observe" name="observe_days" value="' . esc_attr( (string) $settings['observe_days'] ) . '" class="small-text" aria-describedby="alo-observe-help"> ' . esc_html__( 'days', 'axle-leftovers' ) . '<p class="description" id="alo-observe-help">' . esc_html__( 'A post type or taxonomy is listed as unregistered only after no code has registered it for this long, on front end and admin requests alike.', 'axle-leftovers' ) . '</p></td></tr>';
 		$checks = array(
 			'keep_exports'    => array( __( 'Exports', 'axle-leftovers' ), __( 'Keep export files when the trash is purged', 'axle-leftovers' ) ),
 			'runtime_ledger'  => array( __( 'Runtime ledger', 'axle-leftovers' ), __( 'Record which plugin creates new tables, options, cron events, roles and capabilities', 'axle-leftovers' ) ),

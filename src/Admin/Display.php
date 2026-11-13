@@ -90,6 +90,14 @@ final class Display {
 					/* translators: %s: number of custom CSS entries. */
 					$parts[] = sprintf( _n( '%s custom CSS entry', '%s custom CSS entries', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
 					break;
+				case 'posttype':
+					/* translators: %s: number of posts left by a post type nothing registers. */
+					$parts[] = sprintf( _n( '%s post of an unregistered post type', '%s posts of unregistered post types', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+					break;
+				case 'taxonomy':
+					/* translators: %s: number of terms left by a taxonomy nothing registers. */
+					$parts[] = sprintf( _n( '%s term of an unregistered taxonomy', '%s terms of unregistered taxonomies', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+					break;
 				case 'role':
 					/* translators: %s: number of roles. */
 					$parts[] = sprintf( _n( '%s role', '%s roles', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
@@ -164,6 +172,59 @@ final class Display {
 		}
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * What a post type or taxonomy holds, so a person can recognise it: counts per
+	 * status, the date range, what hangs off the posts, and a few titles.
+	 *
+	 * @param array $item    The item, with its detail.
+	 * @param array $summary From Content::summary().
+	 * @return string HTML.
+	 */
+	public static function content_summary( array $item, array $summary ): string {
+		$out   = '<details class="alo-sample"><summary>' . esc_html__( 'What is in it', 'axle-leftovers' ) . '</summary>';
+		$parts = array();
+		if ( 'posttype' === $item['type'] ) {
+			$statuses = $summary['statuses'];
+			arsort( $statuses );
+			foreach ( $statuses as $status => $count ) {
+				/* translators: 1: number of posts, 2: post status such as publish or draft. */
+				$parts[] = sprintf( __( '%1$s %2$s', 'axle-leftovers' ), number_format_i18n( (int) $count ), (string) $status );
+			}
+			if ( $parts ) {
+				$out .= '<p class="alo-statuses">' . esc_html( implode( ', ', $parts ) ) . '.</p>';
+			}
+			if ( '' !== $summary['first'] ) {
+				$out .= '<p class="axle-muted alo-range">' . esc_html__( 'Posts dated', 'axle-leftovers' ) . ' ' . self::time( $summary['first'] ) . ' ' . esc_html__( 'to', 'axle-leftovers' ) . ' ' . self::time( $summary['last'] ) . '.</p>';
+			}
+			$moves = array(
+				/* translators: %s: number of meta rows. */
+				sprintf( _n( '%s meta row', '%s meta rows', $summary['meta'], 'axle-leftovers' ), number_format_i18n( $summary['meta'] ) ),
+				/* translators: %s: number of comments. */
+				sprintf( _n( '%s comment', '%s comments', $summary['comments'], 'axle-leftovers' ), number_format_i18n( $summary['comments'] ) ),
+				/* translators: %s: number of term relationships. */
+				sprintf( _n( '%s term relationship', '%s term relationships', $summary['relations'], 'axle-leftovers' ), number_format_i18n( $summary['relations'] ) ),
+			);
+			/* translators: 1: list such as "6 meta rows, 1 comment" and the last item. */
+			$out .= '<p class="axle-muted alo-attached">' . esc_html( sprintf( __( 'Also moves %1$s, %2$s and %3$s.', 'axle-leftovers' ), $moves[0], $moves[1], $moves[2] ) ) . '</p>';
+		} else {
+			/* translators: %s: number of posts that use the terms. */
+			$out .= '<p class="axle-muted alo-attached">' . esc_html( sprintf( __( 'Used by %s posts. Also moves the term meta and the links to those posts.', 'axle-leftovers' ), number_format_i18n( $summary['objects'] ) ) ) . '</p>';
+		}
+		if ( $summary['sample'] ) {
+			$out .= '<ul class="alo-titles">';
+			foreach ( $summary['sample'] as $row ) {
+				$out .= '<li>' . esc_html( $row['title'] );
+				if ( '' !== $row['date'] ) {
+					$out .= ' <span class="axle-muted">(' . esc_html( $row['status'] ) . ', ' . self::time( $row['date'] ) . ')</span>';
+				}
+				$out .= '</li>';
+			}
+			$out .= '</ul>';
+		}
+
+		return $out . '</details>';
 	}
 
 	/**

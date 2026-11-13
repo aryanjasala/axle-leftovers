@@ -26,10 +26,12 @@ defined( 'ABSPATH' ) || exit;
  * - u: top-level uploads folders
  * - p: literal prefixes of dynamic names (`'acme_' . $key` gives `acme_`)
  * - n: identifiers named in the plugin's uninstall.php
+ * - y: post types registered with register_post_type()
+ * - x: taxonomies registered with register_taxonomy()
  */
 final class Signature {
 
-	public const KEYS = array( 't', 'o', 'c', 'm', 'r', 'u', 'p', 'n' );
+	public const KEYS = array( 't', 'o', 'c', 'm', 'r', 'u', 'p', 'n', 'y', 'x' );
 
 	/**
 	 * Most names kept per key, so one huge plugin cannot bloat the ledger.
@@ -96,6 +98,8 @@ final class Signature {
 		'register_meta'            => array( 1, 'm', '' ),
 		'register_post_meta'       => array( 1, 'm', '' ),
 		'register_term_meta'       => array( 1, 'm', '' ),
+		'register_post_type'       => array( 0, 'y', '' ),
+		'register_taxonomy'        => array( 0, 'x', '' ),
 		'add_role'                 => array( 0, 'r', '' ),
 		'remove_role'              => array( 0, 'r', '' ),
 		'add_cap'                  => array( 0, 'r', '' ),

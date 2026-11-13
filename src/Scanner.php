@@ -20,7 +20,7 @@ class Scanner {
 
 	public const OPTION = 'axle_leftovers_scan';
 
-	public const STEPS = array( 'plugins', 'themes', 'table', 'option', 'cron', 'postmeta', 'usermeta', 'termmeta', 'commentmeta', 'folder', 'template', 'globalstyles', 'customcss', 'role', 'cap', 'sitemeta', 'finish' );
+	public const STEPS = array( 'plugins', 'themes', 'table', 'option', 'cron', 'postmeta', 'usermeta', 'termmeta', 'commentmeta', 'folder', 'template', 'globalstyles', 'customcss', 'posttype', 'taxonomy', 'role', 'cap', 'sitemeta', 'finish' );
 
 	/**
 	 * Most items listed per type, so a site with thousands of stray transients stays usable.
@@ -170,6 +170,8 @@ class Scanner {
 			'started_gmt'       => current_time( 'mysql', true ),
 			'finished_gmt'      => $old['finished_gmt'] ?? '',
 			'items'             => $old['items'] ?? array(),
+			'watching'          => $old['watching'] ?? array(),
+			'fresh_watching'    => array(),
 			'stale'             => false,
 			'rescan_signatures' => $rescan_signatures,
 		);
@@ -412,8 +414,8 @@ class Scanner {
 
 			$type   = (string) $item['type'];
 			$counts = $group['counts'];
-			// Theme content is one item per theme; the count that matters is its posts.
-			$counts[ $type ]          = ( $counts[ $type ] ?? 0 ) + ( Themes::is_content_type( $type ) ? max( 1, (int) $item['rows'] ) : 1 );
+			// Theme content is one item per theme, and a post type or taxonomy is one item for all its rows; the count that matters is the posts or terms.
+			$counts[ $type ]          = ( $counts[ $type ] ?? 0 ) + ( Themes::is_content_type( $type ) || Content::is_content_type( $type ) ? max( 1, (int) $item['rows'] ) : 1 );
 			$group['counts']          = $counts;
 			$group['items'][]         = $item;
 			$group['bytes']          += (int) $item['bytes'];
@@ -657,6 +659,25 @@ class Scanner {
 				}
 				return true;
 
+			case 'posttype':
+			case 'taxonomy':
+				foreach ( ( new Content() )->counts( $type ) as $name => $stats ) {
+					$verdict = Observer::verdict( $type, (string) $name );
+					if ( 'unregistered' === $verdict['status'] ) {
+						$raw[ $type ][ (string) $name ] = $stats;
+					} elseif ( 'registered' !== $verdict['status'] ) {
+						// Not registered now, but not watched long enough to say so: reported, never listed.
+						$state['fresh_watching'][] = array(
+							'type'   => $type,
+							'name'   => (string) $name,
+							'rows'   => (int) $stats['rows'],
+							'status' => $verdict['status'],
+							'ready'  => gmdate( 'Y-m-d H:i:s', (int) $verdict['ready'] ),
+						);
+					}
+				}
+				return true;
+
 			case 'role':
 				foreach ( $this->inventory->roles() as $role => $data ) {
 					if ( ! Core::is_protected( 'role', (string) $role ) ) {
@@ -757,6 +778,9 @@ class Scanner {
 				if ( $who['in_use'] ) {
 					continue;
 				}
+				if ( Content::is_content_type( (string) $type ) ) {
+					$who['evidence'][] = Content::evidence( (string) $type, $name );
+				}
 				if ( ++$listed > self::MAX_PER_TYPE ) {
 					break;
 				}
@@ -784,6 +808,7 @@ class Scanner {
 					'rows'       => (int) ( $stats['rows'] ?? 0 ),
 					'bytes'      => (int) ( $stats['bytes'] ?? 0 ),
 					'autoload'   => ! empty( $stats['autoload'] ),
+					'detail'     => (array) ( $stats['detail'] ?? array() ),
 					'refs'       => array(),
 				);
 			}
@@ -805,6 +830,7 @@ class Scanner {
 				'started_gmt'  => $state['started_gmt'] ?? '',
 				'finished_gmt' => current_time( 'mysql', true ),
 				'items'        => $items,
+				'watching'     => (array) ( $state['fresh_watching'] ?? array() ),
 				// A plugin deleted while this scan ran needs another one.
 				'stale'        => $was_stale,
 			)
@@ -813,7 +839,7 @@ class Scanner {
 		/**
 		 * Fires when a scan for leftovers finishes.
 		 *
-		 * @param array[] $items The leftovers found: id, type, name, scope, owner, owner_name, owner_kind, confidence, evidence, rows, bytes, autoload, refs.
+		 * @param array[] $items The leftovers found: id, type, name, scope, owner, owner_name, owner_kind, confidence, evidence, rows, bytes, autoload, detail, refs.
 		 */
 		do_action( 'axle_leftovers_scan_finished', $items );
 	}
