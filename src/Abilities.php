@@ -81,7 +81,7 @@ final class Abilities implements Service {
 			self::CATEGORY,
 			array(
 				'label'       => __( 'Axle Leftovers', 'axle-leftovers' ),
-				'description' => __( 'Find what deleted plugins left behind, with evidence, and move it to a trash with undo.', 'axle-leftovers' ),
+				'description' => __( 'Find what deleted plugins and themes left behind, with evidence, and move it to a trash with undo.', 'axle-leftovers' ),
 			)
 		);
 	}
@@ -104,6 +104,7 @@ final class Abilities implements Service {
 				'scope'      => array( 'type' => 'string' ),
 				'owner'      => array( 'type' => 'string' ),
 				'owner_name' => array( 'type' => 'string' ),
+				'owner_kind' => array( 'type' => 'string' ),
 				'confidence' => array( 'type' => 'string' ),
 				'evidence'   => array( 'type' => 'array' ),
 				'rows'       => array( 'type' => 'integer' ),
@@ -135,11 +136,16 @@ final class Abilities implements Service {
 		$this->ability(
 			'list-leftovers',
 			__( 'List leftovers', 'axle-leftovers' ),
-			__( 'Tables, options, cron events, meta keys, uploads folders, roles and capabilities left by deleted plugins, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), type or confidence.', 'axle-leftovers' ),
+			__( 'Tables, options, cron events, meta keys, uploads folders, roles, capabilities, and the settings, templates, global styles and custom CSS of deleted themes, left by deleted plugins and themes, with the owner, confidence and evidence. Filter by plugin slug (empty string for unknown items), theme folder name, owner kind (plugin or theme), type or confidence.', 'axle-leftovers' ),
 			array(
 				'type'                 => 'object',
 				'properties'           => array(
 					'plugin'     => array( 'type' => 'string' ),
+					'theme'      => array( 'type' => 'string' ),
+					'kind'       => array(
+						'type' => 'string',
+						'enum' => array( 'plugin', 'theme', 'mu-plugin' ),
+					),
 					'type'       => array(
 						'type' => 'string',
 						'enum' => $types,
@@ -391,6 +397,61 @@ final class Abilities implements Service {
 			)
 		);
 
+		$settings_schema = array(
+			'type'                 => 'object',
+			'properties'           => array(
+				'retention_days'  => array(
+					'type'    => 'integer',
+					'minimum' => 1,
+					'maximum' => 3650,
+				),
+				'export_max_mb'   => array(
+					'type'    => 'integer',
+					'minimum' => 0,
+				),
+				'keep_exports'    => array( 'type' => 'boolean' ),
+				'runtime_ledger'  => array( 'type' => 'boolean' ),
+				'track_meta_keys' => array( 'type' => 'boolean' ),
+				'online_lookup'   => array( 'type' => 'boolean' ),
+				'remote_dataset'  => array( 'type' => 'boolean' ),
+			),
+			'additionalProperties' => false,
+		);
+
+		$this->ability(
+			'get-settings',
+			__( 'Get the settings', 'axle-leftovers' ),
+			__( 'How long the trash keeps items, what is recorded, and whether the online lookup and the full list download are allowed.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			$settings_schema,
+			array( $this, 'get_settings' ),
+			$permission,
+			array(
+				'readonly'   => true,
+				'idempotent' => true,
+			)
+		);
+
+		$this->ability(
+			'update-settings',
+			__( 'Change the settings', 'axle-leftovers' ),
+			__( 'Changes the settings you pass and keeps the rest. Turning on online_lookup or remote_dataset allows the external services described in the readme. Safe to repeat.', 'axle-leftovers' ),
+			array_merge( $settings_schema, array( 'minProperties' => 1 ) ),
+			$settings_schema,
+			array( $this, 'update_settings' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => true,
+			)
+		);
+
 		$this->ability(
 			'download-dataset',
 			__( 'Download the full signature list', 'axle-leftovers' ),
@@ -444,6 +505,31 @@ final class Abilities implements Service {
 	}
 
 	/**
+	 * The settings.
+	 *
+	 * @return array
+	 */
+	public function get_settings(): array {
+		return Settings::all();
+	}
+
+	/**
+	 * Changes the settings that were passed.
+	 *
+	 * @param array $input Settings to change.
+	 * @return array The settings now.
+	 */
+	public function update_settings( $input ): array {
+		$settings = Settings::all();
+		foreach ( array_intersect_key( (array) $input, $settings ) as $key => $value ) {
+			$settings[ $key ] = is_bool( $settings[ $key ] ) ? (bool) $value : (int) $value;
+		}
+		Settings::save( $settings );
+
+		return Settings::all();
+	}
+
+	/**
 	 * Deletes the downloaded signature list.
 	 *
 	 * @return array{deleted: bool}
@@ -487,7 +573,7 @@ final class Abilities implements Service {
 	/**
 	 * Lists leftovers.
 	 *
-	 * @param array|null $input plugin, type, confidence.
+	 * @param array|null $input plugin, theme, kind, type, confidence.
 	 * @return array
 	 */
 	public function list_leftovers( $input = array() ): array {
@@ -495,6 +581,8 @@ final class Abilities implements Service {
 		$filters = array(
 			'type'       => (string) ( $input['type'] ?? '' ),
 			'confidence' => (string) ( $input['confidence'] ?? '' ),
+			'theme'      => (string) ( $input['theme'] ?? '' ),
+			'kind'       => (string) ( $input['kind'] ?? '' ),
 		);
 		if ( isset( $input['plugin'] ) ) {
 			$filters['plugin'] = (string) $input['plugin'];
@@ -522,7 +610,7 @@ final class Abilities implements Service {
 	 * @return array
 	 */
 	public function list_trash(): array {
-		return array_map( array( Trash::class, 'public_row' ), $this->trash->rows( array( 'status' => 'trashed' ) ) );
+		return array_map( array( Trash::class, 'public_row' ), $this->trash->listed( array( 'status' => 'trashed' ) ) );
 	}
 
 	/**

@@ -80,7 +80,7 @@ test.describe( 'Axle Leftovers', () => {
 			await expect( card.locator( `tr[data-item="${ id }"] .alo-badge` ) ).toHaveText( 'Certain' );
 		}
 		await expect( card.locator( 'tr[data-item="option:lm_version"]' ) ).toHaveCount( 0 );
-		await expect( card.locator( 'tr[data-item="table:wp_lm_items"]' ) ).toContainText( 'Created when Leftover Maker was activated on' );
+		await expect( card.locator( 'tr[data-item="table:wp_lm_items"]' ) ).toContainText( 'Created when Leftover Maker was activated' );
 		await expect( card.locator( 'tr[data-item="option:lm_cache"]' ) ).toContainText( 'Autoloaded' );
 	} );
 
@@ -155,10 +155,10 @@ test.describe( 'Axle Leftovers', () => {
 		await page.getByRole( 'button', { name: 'Move selected to trash' } ).click();
 		const dialog = page.locator( '#alo-confirm' );
 		await dialog.getByRole( 'button', { name: 'Move to trash' } ).click();
-		await expect( dialog.locator( '.alo-confirm-error' ) ).toHaveText( 'The typed name does not match.' );
+		await expect( dialog.locator( '.alo-confirm-error' ) ).toHaveText( 'The typed name does not match. Check it and try again.' );
 		await dialog.getByLabel( 'Type wp_mystery_log' ).fill( 'wp_mystery_lo' );
 		await dialog.getByRole( 'button', { name: 'Move to trash' } ).click();
-		await expect( dialog.locator( '.alo-confirm-error' ) ).toHaveText( 'The typed name does not match.' );
+		await expect( dialog.locator( '.alo-confirm-error' ) ).toHaveText( 'The typed name does not match. Check it and try again.' );
 		expect( seed.tables( 'wp\\_mystery\\_log' ) ).toEqual( [ 'wp_mystery_log' ] );
 
 		await dialog.getByLabel( 'Type wp_mystery_log' ).fill( 'wp_mystery_log' );
@@ -319,7 +319,9 @@ test.describe( 'Axle Leftovers', () => {
 
 		await page.locator( 'tr[data-plugin="axle-leftovers/axle-leftovers.php"] .deactivate a' ).click();
 		await dialog.getByRole( 'button', { name: 'Restore all' } ).click();
-		await page.waitForURL( /plugins\.php/ );
+		// The page is already on plugins.php, so wait for the database, not for the URL.
+		await expect.poll( () => seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" )[ 0 ][ 0 ], { timeout: 30_000 } ).toBe( 'restored' );
+		await page.waitForLoadState( 'load' );
 		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" ) ).toEqual( [ [ 'restored' ] ] );
 		expect( wp( 'cron', 'event', 'list', '--fields=hook', '--format=csv' ) ).toContain( 'lm_cleanup' );
 		await expect( page.locator( '#alo-deactivate' ) ).toHaveCount( 0 );

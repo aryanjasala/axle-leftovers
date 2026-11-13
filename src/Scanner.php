@@ -20,7 +20,7 @@ class Scanner {
 
 	public const OPTION = 'axle_leftovers_scan';
 
-	public const STEPS = array( 'plugins', 'table', 'option', 'cron', 'postmeta', 'usermeta', 'termmeta', 'commentmeta', 'folder', 'role', 'cap', 'sitemeta', 'finish' );
+	public const STEPS = array( 'plugins', 'themes', 'table', 'option', 'cron', 'postmeta', 'usermeta', 'termmeta', 'commentmeta', 'folder', 'template', 'globalstyles', 'customcss', 'role', 'cap', 'sitemeta', 'finish' );
 
 	/**
 	 * Most items listed per type, so a site with thousands of stray transients stays usable.
@@ -206,6 +206,8 @@ class Scanner {
 			$step = self::STEPS[ (int) $state['step'] ] ?? 'finish';
 			if ( 'plugins' === $step ) {
 				$done = $this->scan_plugins( $state );
+			} elseif ( 'themes' === $step ) {
+				$done = $this->scan_themes( $state );
 			} elseif ( 'finish' === $step ) {
 				$this->finish( $state );
 				return true;
@@ -272,9 +274,9 @@ class Scanner {
 	}
 
 	/**
-	 * Records plugins gone from the folder without WordPress deleting them.
+	 * Records plugins and themes gone from their folders without WordPress deleting them.
 	 *
-	 * @return string[] Slugs found removed.
+	 * @return string[] Slugs found removed; themes as `theme:<folder>`.
 	 */
 	public function detect_removed_outside(): array {
 		if ( ! function_exists( 'get_plugins' ) ) {
@@ -287,9 +289,16 @@ class Scanner {
 			$installed[ Ledger::slug_for( (string) $file ) ] = true;
 		}
 
+		Themes::flush();
+		$themes = Themes::installed();
+
 		$removed = array();
 		foreach ( $this->ledger->all() as $slug => $entry ) {
-			if ( null === $entry['removed_gmt'] && ! isset( $installed[ $slug ] ) && 'axle-leftovers' !== $slug ) {
+			if ( null !== $entry['removed_gmt'] || 'axle-leftovers' === $slug ) {
+				continue;
+			}
+			$is_theme = 0 === strpos( $slug, 'theme:' );
+			if ( $is_theme ? ! isset( $themes[ substr( $slug, 6 ) ] ) : ! isset( $installed[ $slug ] ) ) {
 				$this->ledger->mark_removed( $slug, 'outside' );
 				$removed[] = $slug;
 			}
@@ -305,7 +314,7 @@ class Scanner {
 	/**
 	 * The listed leftovers.
 	 *
-	 * @param array $filters plugin (owner slug, or '' for unknown), type, confidence, scope.
+	 * @param array $filters plugin (owner slug, or '' for unknown), theme (theme folder), kind (plugin, theme or mu-plugin), type, confidence, scope.
 	 * @return array<int, array>
 	 */
 	public function items( array $filters = array() ): array {
@@ -318,6 +327,12 @@ class Scanner {
 					if ( isset( $filters['plugin'] ) && $item['owner'] !== $filters['plugin'] ) {
 						return false;
 					}
+					if ( ! empty( $filters['theme'] ) && 'theme:' . $filters['theme'] !== $item['owner'] ) {
+						return false;
+					}
+					if ( ! empty( $filters['kind'] ) && self::owner_kind( (string) $item['owner'] ) !== $filters['kind'] ) {
+						return false;
+					}
 					if ( ! empty( $filters['type'] ) && $item['type'] !== $filters['type'] ) {
 						return false;
 					}
@@ -327,23 +342,42 @@ class Scanner {
 					if ( ! empty( $filters['scope'] ) && $item['scope'] !== $filters['scope'] ) {
 						return false;
 					}
-					return true;
+					// Network items and items of other parts of WordPress need more than the screen's own capability.
+					return Settings::user_can_item( (string) $item['type'], (string) $item['scope'] );
 				}
 			)
 		);
 	}
 
 	/**
+	 * What kind of owner a slug is.
+	 *
+	 * @param string $owner Owner slug.
+	 * @return string plugin, theme, mu-plugin, or '' for no owner.
+	 */
+	public static function owner_kind( string $owner ): string {
+		if ( '' === $owner ) {
+			return '';
+		}
+		if ( 0 === strpos( $owner, 'theme:' ) ) {
+			return 'theme';
+		}
+
+		return 0 === strpos( $owner, 'mu-plugin:' ) ? 'mu-plugin' : 'plugin';
+	}
+
+	/**
 	 * One listed item.
 	 *
-	 * @param string $type Type.
-	 * @param string $name Name.
+	 * @param string $type         Type.
+	 * @param string $name         Name.
+	 * @param bool   $visible_only Hide items the current user may not see.
 	 * @return array|null
 	 */
-	public function item( string $type, string $name ): ?array {
+	public function item( string $type, string $name, bool $visible_only = true ): ?array {
 		foreach ( (array) ( self::state()['items'] ?? array() ) as $item ) {
 			if ( $item['type'] === $type && $item['name'] === $name ) {
-				return $item;
+				return ! $visible_only || Settings::user_can_item( (string) $item['type'], (string) $item['scope'] ) ? $item : null;
 			}
 		}
 
@@ -354,7 +388,7 @@ class Scanner {
 	 * Leftovers grouped by owner, owners with the most autoloaded bytes first.
 	 *
 	 * @param string $scope site or network.
-	 * @return array<string, array{owner: string, owner_name: string, confidence: string, items: array, counts: array<string, int>, bytes: int, autoload_bytes: int, ledger: array|null}>
+	 * @return array<string, array{owner: string, owner_name: string, kind: string, confidence: string, items: array, counts: array<string, int>, bytes: int, autoload_bytes: int, ledger: array|null}>
 	 */
 	public function by_plugin( string $scope = 'site' ): array {
 		$ledger = $this->ledger->all();
@@ -367,6 +401,7 @@ class Scanner {
 			$group = $groups[ $owner ] ?? array(
 				'owner'          => $owner,
 				'owner_name'     => (string) $item['owner_name'],
+				'kind'           => self::owner_kind( $owner ),
 				'confidence'     => (string) $item['confidence'],
 				'items'          => array(),
 				'counts'         => array(),
@@ -375,9 +410,10 @@ class Scanner {
 				'ledger'         => $ledger[ $owner ] ?? null,
 			);
 
-			$type                     = (string) $item['type'];
-			$counts                   = $group['counts'];
-			$counts[ $type ]          = ( $counts[ $type ] ?? 0 ) + 1;
+			$type   = (string) $item['type'];
+			$counts = $group['counts'];
+			// Theme content is one item per theme; the count that matters is its posts.
+			$counts[ $type ]          = ( $counts[ $type ] ?? 0 ) + ( Themes::is_content_type( $type ) ? max( 1, (int) $item['rows'] ) : 1 );
 			$group['counts']          = $counts;
 			$group['items'][]         = $item;
 			$group['bytes']          += (int) $item['bytes'];
@@ -421,6 +457,7 @@ class Scanner {
 				$state['items'][ $index ] = array(
 					'owner'      => $who['owner'],
 					'owner_name' => $who['owner_name'],
+					'owner_kind' => self::owner_kind( (string) $who['owner'] ),
 					'confidence' => $who['confidence'],
 					'evidence'   => $who['evidence'],
 				) + $item;
@@ -503,6 +540,42 @@ class Scanner {
 	}
 
 	/**
+	 * Themes step: themes removed outside WordPress, then the code of a few
+	 * installed themes per call, so a deleted theme's names are known.
+	 *
+	 * @param array $state State, updated.
+	 * @return bool Done.
+	 */
+	private function scan_themes( array &$state ): bool {
+		Themes::flush();
+		$slugs = array_keys( Themes::installed() );
+		sort( $slugs );
+		$cursor = (int) $state['cursor'];
+		$read   = 0;
+		$total  = count( $slugs );
+		for ( ; $cursor < $total && $read < self::SIGNATURES_PER_STEP; $cursor++ ) {
+			$theme = wp_get_theme( $slugs[ $cursor ] );
+			if ( ! $theme->exists() ) {
+				continue;
+			}
+			$entry = $this->ledger->get( 'theme:' . $slugs[ $cursor ] );
+			$stale = ! $entry || null === $entry['signature'] || $entry['signature_version'] !== (string) $theme->get( 'Version' ) || null !== $entry['removed_gmt'];
+			if ( $stale || ! empty( $state['rescan_signatures'] ) ) {
+				$this->recorder->ensure_theme_signature( $slugs[ $cursor ], true );
+				++$read;
+			}
+		}
+		$state['cursor'] = $cursor;
+
+		if ( $cursor >= $total ) {
+			$this->attribution->flush();
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
 	 * Collects the candidates of one type into $state['raw'].
 	 *
 	 * @param string $type  Item type.
@@ -570,6 +643,16 @@ class Scanner {
 							'rows'  => $size['files'],
 							'bytes' => $size['bytes'],
 						);
+					}
+				}
+				return true;
+
+			case 'template':
+			case 'globalstyles':
+			case 'customcss':
+				foreach ( ( new Themes() )->counts( $type ) as $stylesheet => $stats ) {
+					if ( ! Core::is_protected( $type, (string) $stylesheet ) ) {
+						$raw[ $type ][ (string) $stylesheet ] = $stats;
 					}
 				}
 				return true;
@@ -695,6 +778,7 @@ class Scanner {
 					'scope'      => $scope,
 					'owner'      => $who['owner'],
 					'owner_name' => $who['owner_name'],
+					'owner_kind' => self::owner_kind( (string) $who['owner'] ),
 					'confidence' => $who['confidence'],
 					'evidence'   => $who['evidence'],
 					'rows'       => (int) ( $stats['rows'] ?? 0 ),
@@ -729,7 +813,7 @@ class Scanner {
 		/**
 		 * Fires when a scan for leftovers finishes.
 		 *
-		 * @param array[] $items The leftovers found: id, type, name, scope, owner, confidence, evidence, rows, bytes, autoload, refs.
+		 * @param array[] $items The leftovers found: id, type, name, scope, owner, owner_name, owner_kind, confidence, evidence, rows, bytes, autoload, refs.
 		 */
 		do_action( 'axle_leftovers_scan_finished', $items );
 	}

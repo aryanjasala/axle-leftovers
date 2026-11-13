@@ -171,3 +171,34 @@ class FakeWpdb {
 function wp_json_encode_fake( $value ) {
 	return json_encode( $value );
 }
+
+/**
+ * A stand-in for WP_Theme, with only what Leftovers reads.
+ */
+class FakeTheme {
+	private $stylesheet;
+	private $exists;
+	private $data;
+
+	public function __construct( $stylesheet, $exists = true, $data = array() ) {
+		$this->stylesheet = $stylesheet;
+		$this->exists     = $exists;
+		$this->data       = $data + array( 'Name' => ucfirst( $stylesheet ), 'Version' => '1.0' );
+	}
+
+	public function exists() {
+		return $this->exists;
+	}
+
+	public function get( $header ) {
+		return $this->data[ $header ] ?? '';
+	}
+
+	public function get_stylesheet() {
+		return $this->stylesheet;
+	}
+
+	public function get_stylesheet_directory() {
+		return WP_CONTENT_DIR . '/themes/' . $this->stylesheet;
+	}
+}

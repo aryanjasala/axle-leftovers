@@ -104,9 +104,12 @@ class References {
 		$needles = array();
 		$hits    = array();
 		foreach ( $items as $item ) {
-			$id             = $item['type'] . ':' . $item['name'];
-			$needles[ $id ] = self::needles( (string) $item['type'], (string) $item['name'] );
-			$hits[ $id ]    = array();
+			$id          = $item['type'] . ':' . $item['name'];
+			$hits[ $id ] = array();
+			// Theme content is named by a folder, which code mentions for other reasons; the theme itself is not installed.
+			if ( ! Themes::is_content_type( (string) $item['type'] ) ) {
+				$needles[ $id ] = self::needles( (string) $item['type'], (string) $item['name'] );
+			}
 		}
 		if ( ! $needles ) {
 			return $hits;

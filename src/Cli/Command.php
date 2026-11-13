@@ -12,6 +12,7 @@ use AryanX\Axle\Leftovers\Dataset;
 use AryanX\Axle\Leftovers\Ledger;
 use AryanX\Axle\Leftovers\Lookup;
 use AryanX\Axle\Leftovers\Scanner;
+use AryanX\Axle\Leftovers\Settings;
 use AryanX\Axle\Leftovers\Signature;
 use AryanX\Axle\Leftovers\Trash;
 use WP_CLI;
@@ -75,8 +76,14 @@ final class Command {
 	 * [--plugin=<slug>]
 	 * : Only items of this owner. Use --plugin= (empty) for items with no owner.
 	 *
+	 * [--theme=<stylesheet>]
+	 * : Only items left by this theme (its folder name).
+	 *
+	 * [--kind=<kind>]
+	 * : Only items of deleted plugins (plugin) or deleted themes (theme).
+	 *
 	 * [--type=<type>]
-	 * : table, option, cron, postmeta, usermeta, termmeta, commentmeta, folder, role, cap or sitemeta.
+	 * : table, option, cron, postmeta, usermeta, termmeta, commentmeta, folder, template, globalstyles, customcss, role, cap or sitemeta.
 	 *
 	 * [--confidence=<level>]
 	 * : certain, likely, guess or unknown.
@@ -90,6 +97,8 @@ final class Command {
 	 * ## EXAMPLES
 	 *
 	 *     wp axle-leftovers list --plugin=contact-form-7
+	 *     wp axle-leftovers list --theme=twentytwentyone
+	 *     wp axle-leftovers list --kind=theme --type=template
 	 *     wp axle-leftovers list --confidence=unknown --format=json
 	 *
 	 * @subcommand list
@@ -102,6 +111,8 @@ final class Command {
 		$filters = array(
 			'type'       => (string) ( $assoc_args['type'] ?? '' ),
 			'confidence' => (string) ( $assoc_args['confidence'] ?? '' ),
+			'theme'      => (string) ( $assoc_args['theme'] ?? '' ),
+			'kind'       => (string) ( $assoc_args['kind'] ?? '' ),
 		);
 		if ( array_key_exists( 'plugin', $assoc_args ) ) {
 			$filters['plugin'] = true === $assoc_args['plugin'] ? '' : (string) $assoc_args['plugin'];
@@ -114,6 +125,7 @@ final class Command {
 				'type'       => $item['type'],
 				'name'       => $item['name'],
 				'owner'      => $item['owner'],
+				'kind'       => $item['owner_kind'] ?? '',
 				'confidence' => $item['confidence'],
 				'rows'       => $item['rows'],
 				'bytes'      => $item['bytes'],
@@ -122,7 +134,7 @@ final class Command {
 			);
 		}
 
-		Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'type', 'name', 'owner', 'confidence', 'rows', 'bytes', 'autoload', 'used_by' ) );
+		Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'type', 'name', 'owner', 'kind', 'confidence', 'rows', 'bytes', 'autoload', 'used_by' ) );
 	}
 
 	/**
@@ -246,6 +258,9 @@ final class Command {
 	 * [--plugin=<slug>]
 	 * : Trash every listed item of this owner (of the given type, if any). Guess and Unknown items still need their names typed.
 	 *
+	 * [--theme=<stylesheet>]
+	 * : Trash every listed item left by this deleted theme (of the given type, if any): its settings, options, templates, global styles and custom CSS.
+	 *
 	 * [--older-than=<days>]
 	 * : With `purge`: only items trashed more than this many days ago. 0 purges everything.
 	 *
@@ -262,6 +277,7 @@ final class Command {
 	 *
 	 *     wp axle-leftovers trash table wp_cf7_entries option cf7_settings --yes
 	 *     wp axle-leftovers trash --plugin=contact-form-7 --yes
+	 *     wp axle-leftovers trash --theme=old-theme --yes
 	 *     wp axle-leftovers trash list
 	 *     wp axle-leftovers trash purge --older-than=30 --yes
 	 *
@@ -282,8 +298,8 @@ final class Command {
 		$this->ensure_scanned();
 		$items   = array();
 		$confirm = array();
-		if ( isset( $assoc_args['plugin'] ) ) {
-			$filters = array( 'plugin' => (string) $assoc_args['plugin'] );
+		if ( isset( $assoc_args['plugin'] ) || ! empty( $assoc_args['theme'] ) ) {
+			$filters = isset( $assoc_args['plugin'] ) ? array( 'plugin' => (string) $assoc_args['plugin'] ) : array( 'theme' => (string) $assoc_args['theme'] );
 			if ( '' !== $first ) {
 				$filters['type'] = $first;
 			}
@@ -298,7 +314,7 @@ final class Command {
 			// Pairs or a type followed by names: `table a b option c`.
 			$type = '';
 			foreach ( $args as $arg ) {
-				if ( in_array( $arg, array( 'table', 'option', 'cron', 'postmeta', 'usermeta', 'termmeta', 'commentmeta', 'folder', 'role', 'cap', 'sitemeta' ), true ) ) {
+				if ( array_key_exists( (string) $arg, Settings::item_types() ) ) {
 					$type = (string) $arg;
 					continue;
 				}
@@ -488,6 +504,79 @@ final class Command {
 			);
 		}
 		Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'slug', 'name', 'installs', 'url', 'confidence' ) );
+	}
+
+	/**
+	 * Shows or changes the settings.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [<action>]
+	 * : list, get or set. Default: list.
+	 *
+	 * [<key>]
+	 * : With get or set: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup or remote_dataset.
+	 *
+	 * [<value>]
+	 * : With set: a number, or true or false for the switches. Turning on online_lookup or remote_dataset allows the external services described in the readme.
+	 *
+	 * [--format=<format>]
+	 * : With list: table, csv, json or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp axle-leftovers settings
+	 *     wp axle-leftovers settings get retention_days
+	 *     wp axle-leftovers settings set retention_days 14
+	 *     wp axle-leftovers settings set keep_exports true
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function settings( $args, $assoc_args ): void {
+		$action   = (string) ( $args[0] ?? 'list' );
+		$settings = Settings::all();
+		$key      = (string) ( $args[1] ?? '' );
+
+		if ( 'list' === $action ) {
+			$rows = array();
+			foreach ( $settings as $name => $value ) {
+				$rows[] = array(
+					'key'   => $name,
+					'value' => is_bool( $value ) ? ( $value ? 'true' : 'false' ) : (string) $value,
+				);
+			}
+			Utils\format_items( (string) ( $assoc_args['format'] ?? 'table' ), $rows, array( 'key', 'value' ) );
+			return;
+		}
+		if ( ! in_array( $action, array( 'get', 'set' ), true ) || ! array_key_exists( $key, $settings ) ) {
+			WP_CLI::error( 'Use list, get <key> or set <key> <value>. Keys: ' . implode( ', ', array_keys( $settings ) ) . '.' );
+			return;
+		}
+		if ( 'get' === $action ) {
+			WP_CLI::print_value( $settings[ $key ], array( 'format' => 'json' ) );
+			return;
+		}
+
+		$value = (string) ( $args[2] ?? '' );
+		if ( is_bool( $settings[ $key ] ) ) {
+			if ( ! in_array( strtolower( $value ), array( 'true', 'false', '1', '0', 'yes', 'no', 'on', 'off' ), true ) ) {
+				WP_CLI::error( sprintf( '%s takes true or false.', $key ) );
+				return;
+			}
+			$settings[ $key ] = in_array( strtolower( $value ), array( 'true', '1', 'yes', 'on' ), true );
+		} else {
+			if ( ! ctype_digit( $value ) ) {
+				WP_CLI::error( sprintf( '%s takes a whole number.', $key ) );
+				return;
+			}
+			$settings[ $key ] = (int) $value;
+		}
+		Settings::save( $settings );
+		WP_CLI::success( sprintf( 'Set %s to %s.', $key, (string) wp_json_encode( Settings::all()[ $key ] ) ) );
 	}
 
 	/**

@@ -16,6 +16,8 @@ test.describe( 'Screenshots', () => {
 		prepareSite( 'Bean There Coffee' );
 		seed.installHelpers();
 		seed.seedScreens();
+		seed.makeThemeLeftovers();
+		wp( 'user', 'meta', 'update', '1', 'axle_leftovers_steps_dismissed', '1' );
 
 		context = await browser.newContext( { storageState: STORAGE_STATE, viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 } );
 		page = await context.newPage();
@@ -24,9 +26,11 @@ test.describe( 'Screenshots', () => {
 	test.afterAll( async () => {
 		await context.close();
 		seed.resetAll();
+		seed.resetThemes();
+		wp( 'user', 'meta', 'delete', '1', 'axle_leftovers_steps_dismissed' );
 	} );
 
-	test( '1: by plugin', async () => {
+	test( '1: by owner', async () => {
 		await page.goto( SCREEN );
 		const card = page.locator( '.alo-card[data-owner="leftover-maker"]' );
 		await card.locator( '.alo-review summary' ).click();
@@ -62,5 +66,14 @@ test.describe( 'Screenshots', () => {
 		await page.goto( '/wp-admin/plugins.php' );
 		await expect( page.locator( '.alo-deleted-notice' ) ).toBeVisible();
 		await shot( page, 5 );
+	} );
+
+	test( '6: a deleted theme', async () => {
+		await page.goto( SCREEN );
+		const card = page.locator( '.alo-card[data-owner="theme:leftover-theme"]' );
+		await card.locator( '.alo-review summary' ).click();
+		await expect( card.locator( '.alo-items' ) ).toBeVisible();
+		await card.scrollIntoViewIfNeeded();
+		await shot( page, 6, { fullPage: true } );
 	} );
 } );

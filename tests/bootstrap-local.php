@@ -7,3 +7,4 @@
  */
 
 require __DIR__ . '/Stubs/wpcli.php';
+require __DIR__ . '/Stubs/wpterm.php';

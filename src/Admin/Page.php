@@ -18,6 +18,7 @@ use AryanX\Axle\Leftovers\Service;
 use AryanX\Axle\Leftovers\Settings;
 use AryanX\Axle\Leftovers\Trash;
 use AryanX\Axle\Leftovers\Signature;
+use AryanX\Axle\Leftovers\Themes;
 use const AryanX\Axle\Leftovers\PLUGIN_FILE;
 use const AryanX\Axle\Leftovers\VERSION;
 
@@ -32,6 +33,8 @@ final class Page implements Service {
 	public const SLUG   = 'axle-leftovers';
 	public const ACTION = 'axle_leftovers';
 	public const NONCE  = 'axle_leftovers';
+
+	public const STEPS_META = 'axle_leftovers_steps_dismissed';
 
 	/**
 	 * The scanner.
@@ -101,21 +104,107 @@ final class Page implements Service {
 		add_action( 'admin_post_' . self::ACTION, array( $this, 'handle' ) );
 		add_action( 'admin_post_axle_leftovers_download', array( $this, 'download' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
+		add_filter( 'plugin_action_links_' . plugin_basename( PLUGIN_FILE ), array( $this, 'action_links' ) );
+		add_filter( 'network_admin_plugin_action_links_' . plugin_basename( PLUGIN_FILE ), array( $this, 'network_action_links' ) );
 	}
 
 	/**
 	 * Tools > Leftovers.
 	 */
 	public function menu(): void {
-		add_management_page( __( 'Leftovers', 'axle-leftovers' ), __( 'Leftovers', 'axle-leftovers' ), Settings::capability(), self::SLUG, array( $this, 'render' ) );
+		$hook = add_management_page( __( 'Leftovers', 'axle-leftovers' ), __( 'Leftovers', 'axle-leftovers' ), Settings::capability(), self::SLUG, array( $this, 'render' ) );
+		if ( $hook ) {
+			add_action( 'load-' . $hook, array( $this, 'help' ) );
+		}
 	}
 
 	/**
 	 * Network Admin > Settings > Leftovers, for network-wide items.
 	 */
 	public function network_menu(): void {
-		add_submenu_page( 'settings.php', __( 'Leftovers', 'axle-leftovers' ), __( 'Leftovers', 'axle-leftovers' ), Settings::capability( true ), self::SLUG, array( $this, 'render_network' ) );
+		$hook = add_submenu_page( 'settings.php', __( 'Leftovers', 'axle-leftovers' ), __( 'Leftovers', 'axle-leftovers' ), Settings::capability( true ), self::SLUG, array( $this, 'render_network' ) );
+		if ( $hook ) {
+			add_action( 'load-' . $hook, array( $this, 'help' ) );
+		}
 	}
+
+	/**
+	 * A link to the screen in the plugin's row on the Plugins screen.
+	 *
+	 * @param mixed $links Row links.
+	 * @return array
+	 */
+	public function action_links( $links ): array {
+		return $this->with_screen_link( (array) $links, self::url(), false );
+	}
+
+	/**
+	 * The same link on the network Plugins screen.
+	 *
+	 * @param mixed $links Row links.
+	 * @return array
+	 */
+	public function network_action_links( $links ): array {
+		return $this->with_screen_link( (array) $links, self::url( '', true ), true );
+	}
+
+	/**
+	 * Puts a Leftovers link first in a plugin row, when the user may open the screen.
+	 *
+	 * @param array  $links   Row links.
+	 * @param string $url     Screen URL.
+	 * @param bool   $network Network Admin.
+	 * @return array
+	 */
+	private function with_screen_link( array $links, string $url, bool $network ): array {
+		if ( ! current_user_can( Settings::capability( $network ) ) ) {
+			return $links;
+		}
+
+		return array_merge( array( 'leftovers' => '<a href="' . esc_url( $url ) . '">' . esc_html__( 'Leftovers', 'axle-leftovers' ) . '</a>' ), $links );
+	}
+
+	/**
+	 * The Help tab: an Overview, then one tab for each job the screen does.
+	 */
+	public function help(): void {
+		AxleUi::help_tabs(
+			array(
+				array(
+					'id'      => 'overview',
+					'title'   => __( 'Overview', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'Deleting a plugin or a theme does not always clean up after it. Leftovers lists the tables, options, cron events, meta, roles, uploads folders and theme settings that nothing installed owns any more, and says who they belonged to and how sure it is.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Nothing is deleted on the first step. Items go to a trash and come back with one click.', 'axle-leftovers' ) . '</p>',
+				),
+				array(
+					'id'      => 'evidence',
+					'title'   => __( 'Owners and evidence', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'Certain means Leftovers saw the plugin or theme create the item, or saw it being deleted. Likely means the name is in its code. Guess means the name only starts like a known plugin. Unknown means nothing points anywhere.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Each item lists its evidence. Anything an installed plugin, theme or must-use plugin may own is never listed, and a name that active code still uses cannot be trashed.', 'axle-leftovers' ) . '</p>',
+				),
+				array(
+					'id'      => 'trash',
+					'title'   => __( 'Trash and restore', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'Moving items to the trash exports each one first. Tables are renamed, options and posts are copied out, and folders are moved. Guess and Unknown items need their names typed.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'On the Trash tab, restore a whole batch or one item. Items are deleted for good after the retention period, or when you empty the trash.', 'axle-leftovers' ) . '</p>',
+				),
+				array(
+					'id'      => 'themes',
+					'title'   => __( 'Themes', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'A deleted theme leaves its Customizer settings, its options, and on block themes the templates, template parts, global styles and custom CSS you saved. Leftovers lists them under the theme name.', 'axle-leftovers' ) . '</p><p>' . esc_html__( 'Anything of the active theme, its parent or any installed theme is never listed. Widgets that a theme switch left inactive are only reported.', 'axle-leftovers' ) . '</p>',
+				),
+				array(
+					'id'      => 'settings',
+					'title'   => __( 'Settings and lookups', 'axle-leftovers' ),
+					'content' => '<p>' . esc_html__( 'Settings control how long the trash keeps items and what gets recorded. The online lookup and the full signature list are off until you turn them on. They only ever send an item name or fetch a public list.', 'axle-leftovers' ) . '</p>',
+				),
+			)
+		);
+	}
+
+	/**
+	 * Whether the form being handled came from the network screen, for the flash message.
+	 *
+	 * @var bool
+	 */
+	private bool $network = false;
 
 	/**
 	 * The screen's URL.
@@ -131,22 +220,23 @@ final class Page implements Service {
 	}
 
 	/**
-	 * Styles and scripts on the screen and on Plugins.
+	 * Styles and scripts on the screen, and on the Plugins and Themes screens.
 	 *
 	 * @param string $hook Screen hook.
 	 */
 	public function assets( $hook ): void {
 		$ours = in_array( (string) $hook, array( 'tools_page_' . self::SLUG, 'settings_page_' . self::SLUG, 'settings_page_' . self::SLUG . '-network' ), true );
-		if ( ! $ours && ! in_array( (string) $hook, array( 'plugins.php', 'plugins-network.php' ), true ) ) {
+		if ( ! $ours && ! in_array( (string) $hook, array( 'plugins.php', 'plugins-network.php', 'themes.php', 'themes-network.php' ), true ) ) {
 			return;
 		}
 
 		$base = plugins_url( 'assets/', PLUGIN_FILE );
-		if ( $ours ) {
+		if ( $ours || 'plugins.php' === $hook ) {
+			// The Plugins screen shows the in-place warning before deactivating Leftovers.
 			AxleUi::enqueue();
 		}
 		wp_enqueue_style( 'axle-leftovers', $base . 'admin.css', $ours ? array( AxleUi::HANDLE ) : array(), VERSION );
-		wp_enqueue_script( 'axle-leftovers', $base . 'admin.js', array( 'wp-hooks', 'wp-api-fetch' ), VERSION, true );
+		wp_enqueue_script( 'axle-leftovers', $base . 'admin.js', array( 'wp-hooks', 'wp-api-fetch', 'wp-a11y' ), VERSION, true );
 		wp_localize_script(
 			'axle-leftovers',
 			'axleLeftoversData',
@@ -156,12 +246,16 @@ final class Page implements Service {
 					/* translators: %d: number of items. */
 					'confirm'     => __( 'Move %d items to the trash? Each one is exported first, and you can restore the batch from the Trash tab.', 'axle-leftovers' ),
 					'confirmOne'  => __( 'Move 1 item to the trash? It is exported first, and you can restore it from the Trash tab.', 'axle-leftovers' ),
+					'trashTitle'  => __( 'Move to the trash?', 'axle-leftovers' ),
+					'trashOk'     => __( 'Move to trash', 'axle-leftovers' ),
+					'deleteTitle' => __( 'Delete for good?', 'axle-leftovers' ),
 					'typeName'    => __( 'The owner of these items is not certain. Type each name to confirm:', 'axle-leftovers' ),
 					'nothing'     => __( 'Pick at least one item.', 'axle-leftovers' ),
-					'mismatch'    => __( 'The typed name does not match.', 'axle-leftovers' ),
+					'mismatch'    => __( 'The typed name does not match. Check it and try again.', 'axle-leftovers' ),
 					/* translators: %s: item name. */
 					'typeLabel'   => __( 'Type %s', 'axle-leftovers' ),
-					'deleteError' => __( 'Could not load the leftovers notice.', 'axle-leftovers' ),
+					'working'     => __( 'Working. This can take a moment.', 'axle-leftovers' ),
+					'deleteError' => __( 'Could not check what the deleted plugin or theme left behind. Open Tools > Leftovers to review it.', 'axle-leftovers' ),
 				),
 			)
 		);
@@ -196,7 +290,7 @@ final class Page implements Service {
 		$fresh = $this->scanner->ensure_fresh( 8.0 );
 		$scope = $network ? 'network' : 'site';
 		$tabs  = array(
-			'plugins' => __( 'By plugin', 'axle-leftovers' ),
+			'plugins' => __( 'By owner', 'axle-leftovers' ),
 			'unknown' => __( 'Unknown', 'axle-leftovers' ),
 			'trash'   => __( 'Trash', 'axle-leftovers' ),
 		);
@@ -242,15 +336,20 @@ final class Page implements Service {
 		echo '<hr class="wp-header-end">';
 		$this->flash();
 
-		echo '<div class="axle-actions alo-status">';
+		if ( ! $network && 'plugins' === $tab ) {
+			$this->render_steps( $state );
+		}
+
+		echo '<div class="axle-toolbar alo-status">';
 		if ( ! empty( $state['finished_gmt'] ) ) {
-			echo '<span class="axle-muted">' . esc_html__( 'Last scan finished', 'axle-leftovers' ) . ' ' . Display::time( (string) $state['finished_gmt'] ) . '.</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
+			echo '<span class="axle-muted">' . esc_html__( 'Last scan finished:', 'axle-leftovers' ) . ' ' . Display::time( (string) $state['finished_gmt'] ) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 		}
 		if ( ! $fresh ) {
 			echo '<strong>' . esc_html__( 'A scan is running in the background. Reload in a minute for complete results.', 'axle-leftovers' ) . '</strong>';
 		}
+		echo '<span class="axle-toolbar__end">';
 		$this->action_form( 'scan', __( 'Scan again', 'axle-leftovers' ), $network );
-		echo '</div>';
+		echo '</span></div>';
 
 		echo '<nav class="nav-tab-wrapper alo-tabs" aria-label="' . esc_attr__( 'Leftovers sections', 'axle-leftovers' ) . '">';
 		foreach ( $tabs as $key => $label ) {
@@ -285,27 +384,146 @@ final class Page implements Service {
 		}
 		echo '</div>';
 
-		$this->render_modal();
+		$this->render_confirm();
 		AxleUi::footer();
 		echo '</div>';
 	}
 
 	/**
-	 * The By plugin tab.
+	 * The Get started card: three steps, each done state read from real data,
+	 * hidden once every step is done or the user dismisses it.
+	 *
+	 * @param array $state Scan state.
+	 */
+	private function render_steps( array $state ): void {
+		if ( get_user_meta( get_current_user_id(), self::STEPS_META, true ) ) {
+			return;
+		}
+
+		$removed = false;
+		foreach ( $this->ledger->all() as $entry ) {
+			if ( null !== $entry['removed_gmt'] ) {
+				$removed = true;
+				break;
+			}
+		}
+		$steps = array(
+			array(
+				'title' => __( 'Scan the site', 'axle-leftovers' ),
+				'text'  => __( 'Leftovers reads the code of every installed plugin and theme once, so it can tell who owns what after they are deleted.', 'axle-leftovers' ),
+				'done'  => ! empty( $state['finished_gmt'] ),
+				'form'  => array( 'scan', __( 'Scan now', 'axle-leftovers' ) ),
+			),
+			array(
+				'title' => __( 'Delete a plugin or theme you do not use', 'axle-leftovers' ),
+				'text'  => __( 'Leftovers records every deletion, and the notice afterwards says what the plugin or theme left behind.', 'axle-leftovers' ),
+				'done'  => $removed,
+				'link'  => array( admin_url( 'plugins.php' ), __( 'Open Plugins', 'axle-leftovers' ) ),
+			),
+			array(
+				'title' => __( 'Review what was left and move it to the trash', 'axle-leftovers' ),
+				'text'  => __( 'Each item shows its evidence. Moving it to the trash exports it first, and you can restore it from the Trash tab.', 'axle-leftovers' ),
+				'done'  => array() !== $this->trash->rows( array(), 1 ),
+				'link'  => array( self::url(), __( 'Review leftovers', 'axle-leftovers' ) ),
+			),
+		);
+		if ( ! in_array( false, array_column( $steps, 'done' ), true ) ) {
+			return;
+		}
+
+		echo '<section class="axle-card alo-steps" aria-labelledby="alo-steps-title">';
+		echo '<h2 class="axle-card__title" id="alo-steps-title">' . esc_html__( 'Get started', 'axle-leftovers' ) . '</h2>';
+		echo '<ol class="axle-steps">';
+		foreach ( $steps as $step ) {
+			echo '<li class="axle-step"><div class="axle-step__body"><strong class="axle-step__title">' . esc_html( $step['title'] ) . '</strong><p>' . esc_html( $step['text'] ) . '</p></div>';
+			if ( $step['done'] ) {
+				echo '<span class="axle-badge axle-badge--good">' . esc_html__( 'Done', 'axle-leftovers' ) . '</span>';
+			} elseif ( isset( $step['form'] ) ) {
+				$this->action_form( $step['form'][0], $step['form'][1], false );
+			} else {
+				echo '<a class="button" href="' . esc_url( $step['link'][0] ) . '">' . esc_html( $step['link'][1] ) . '</a>';
+			}
+			echo '</li>';
+		}
+		echo '</ol>';
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form alo-dismiss-form">';
+		$this->hidden( 'dismiss_steps', false );
+		echo '<button type="submit" class="button-link">' . esc_html__( 'Hide this card', 'axle-leftovers' ) . '</button>';
+		echo '</form></section>';
+	}
+
+	/**
+	 * The By owner tab: one card for each deleted plugin or theme.
 	 *
 	 * @param array $groups  Groups from Scanner::by_plugin().
 	 * @param bool  $network Network screen.
 	 */
 	private function render_plugins( array $groups, bool $network ): void {
-		echo '<p class="axle-intro">' . esc_html__( 'Deleted plugins often leave tables, options and cron events behind. See what each one left and move it to the trash, which you can undo.', 'axle-leftovers' ) . '</p>';
+		echo '<p class="axle-intro">' . esc_html__( 'Deleted plugins and themes often leave tables, options, templates and cron events behind. See what each one left and move it to the trash, which you can undo.', 'axle-leftovers' ) . '</p>';
+		if ( ! $network ) {
+			$this->render_inactive_widgets();
+		}
 		if ( ! $groups ) {
-			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No leftovers from deleted plugins. Everything in the database belongs to WordPress or to an installed plugin or theme.', 'axle-leftovers' ) . '</p></div>';
+			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No leftovers from deleted plugins or themes. When you delete one, what it left behind shows up here, with the evidence for each item. Everything in the database now belongs to WordPress or to an installed plugin or theme.', 'axle-leftovers' ) . '</p>';
+			echo '<p><a class="button" href="' . esc_url( admin_url( 'plugins.php' ) ) . '">' . esc_html__( 'Open Plugins', 'axle-leftovers' ) . '</a> <a class="button" href="' . esc_url( admin_url( 'themes.php' ) ) . '">' . esc_html__( 'Open Themes', 'axle-leftovers' ) . '</a></p></div>';
 			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only filter.
+		$kind  = isset( $_GET['kind'] ) ? sanitize_key( wp_unslash( $_GET['kind'] ) ) : '';
+		$kind  = in_array( $kind, array( 'plugin', 'theme' ), true ) ? $kind : '';
+		$kinds = array(
+			'plugin' => 0,
+			'theme'  => 0,
+		);
+		foreach ( $groups as $group ) {
+			if ( isset( $kinds[ $group['kind'] ] ) ) {
+				++$kinds[ $group['kind'] ];
+			}
+		}
+		if ( $kinds['plugin'] && $kinds['theme'] ) {
+			echo '<div class="axle-toolbar alo-kinds" role="group" aria-label="' . esc_attr__( 'Show leftovers of', 'axle-leftovers' ) . '">';
+			$links = array(
+				''       => sprintf(
+					/* translators: %s: number of owners. */
+					__( 'All (%s)', 'axle-leftovers' ),
+					number_format_i18n( count( $groups ) )
+				),
+				'plugin' => sprintf(
+					/* translators: %s: number of plugins. */
+					__( 'Plugins (%s)', 'axle-leftovers' ),
+					number_format_i18n( $kinds['plugin'] )
+				),
+				'theme'  => sprintf(
+					/* translators: %s: number of themes. */
+					__( 'Themes (%s)', 'axle-leftovers' ),
+					number_format_i18n( $kinds['theme'] )
+				),
+			);
+			foreach ( $links as $key => $label ) {
+				$url = '' === $key ? self::url( '', $network ) : add_query_arg( 'kind', $key, self::url( '', $network ) );
+				printf(
+					'<a class="button%1$s" href="%2$s"%3$s>%4$s</a>',
+					$kind === $key ? ' button-primary' : '',
+					esc_url( $url ),
+					$kind === $key ? ' aria-current="true"' : '',
+					esc_html( $label )
+				);
+			}
+			echo '</div>';
+			if ( '' !== $kind ) {
+				$groups = array_filter(
+					$groups,
+					static function ( array $group ) use ( $kind ): bool {
+						return $group['kind'] === $kind;
+					}
+				);
+			}
 		}
 
 		$autoload = array_sum( array_column( $groups, 'autoload_bytes' ) );
 		echo '<div class="axle-stats">';
-		echo '<div class="axle-stat axle-stat--warning"><span class="axle-stat__value">' . esc_html( number_format_i18n( count( $groups ) ) ) . '</span><span class="axle-stat__label">' . esc_html__( 'deleted plugins left data', 'axle-leftovers' ) . '</span></div>';
+		echo '<div class="axle-stat axle-stat--warning"><span class="axle-stat__value">' . esc_html( number_format_i18n( count( $groups ) ) ) . '</span><span class="axle-stat__label">' . esc_html__( 'deleted plugins and themes left data', 'axle-leftovers' ) . '</span></div>';
 		if ( $autoload > 0 ) {
 			echo '<div class="axle-stat axle-stat--warning alo-cost"><span class="axle-stat__value">' . esc_html( Display::size( (int) $autoload ) ) . '</span><span class="axle-stat__label">' . esc_html__( 'autoloaded on every page load', 'axle-leftovers' ) . '</span></div>';
 		}
@@ -313,12 +531,13 @@ final class Page implements Service {
 
 		foreach ( $groups as $group ) {
 			$id = 'alo-card-' . sanitize_html_class( $group['owner'] );
-			echo '<section class="axle-card alo-card" aria-labelledby="' . esc_attr( $id ) . '" data-owner="' . esc_attr( $group['owner'] ) . '">';
+			echo '<section class="axle-card alo-card" aria-labelledby="' . esc_attr( $id ) . '" data-owner="' . esc_attr( $group['owner'] ) . '" data-kind="' . esc_attr( $group['kind'] ) . '">';
 			echo '<div class="axle-card__head alo-card-head">';
 			echo '<h2 class="axle-card__title" id="' . esc_attr( $id ) . '">' . esc_html( $group['owner_name'] ) . '</h2> ';
+			echo '<span class="axle-badge axle-badge--neutral alo-kind">' . esc_html( 'theme' === $group['kind'] ? __( 'Theme', 'axle-leftovers' ) : __( 'Plugin', 'axle-leftovers' ) ) . '</span> ';
 			echo Display::badge( $group['confidence'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			echo '</div>';
-			echo '<p class="axle-muted alo-meta">' . esc_html( Display::removed( $group['ledger'] ) ) . '</p>';
+			echo '<p class="axle-muted alo-meta">' . Display::removed( $group['ledger'], $group['kind'] ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			echo '<p class="alo-summary">';
 			/* translators: 1: list such as "2 tables and 3 options", 2: size. */
 			echo esc_html( sprintf( __( '%1$s, %2$s in total.', 'axle-leftovers' ), Display::count_list( $group['counts'] ), Display::size( (int) $group['bytes'] ) ) );
@@ -335,6 +554,24 @@ final class Page implements Service {
 	}
 
 	/**
+	 * A note about widgets a theme switch left inactive. Report only: Leftovers never touches widgets.
+	 */
+	private function render_inactive_widgets(): void {
+		$count = Themes::inactive_widgets();
+		if ( $count < 1 ) {
+			return;
+		}
+
+		/* translators: %s: number of widgets. */
+		$text = sprintf( _n( '%s widget is inactive, most likely after a theme switch. Leftovers does not move or delete widgets.', '%s widgets are inactive, most likely after a theme switch. Leftovers does not move or delete widgets.', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+		echo '<div class="notice notice-info inline alo-widgets-note"><p>' . esc_html( $text );
+		if ( current_user_can( 'edit_theme_options' ) && current_theme_supports( 'widgets' ) ) {
+			echo ' <a href="' . esc_url( admin_url( 'widgets.php' ) ) . '">' . esc_html__( 'Review them under Appearance > Widgets.', 'axle-leftovers' ) . '</a>';
+		}
+		echo '</p></div>';
+	}
+
+	/**
 	 * The Unknown tab.
 	 *
 	 * @param array $items   Items without an owner.
@@ -343,7 +580,11 @@ final class Page implements Service {
 	private function render_unknown( array $items, bool $network ): void {
 		echo '<p class="axle-intro">' . esc_html__( 'Nothing points to an owner for these items. They may belong to code that builds names at runtime, to a plugin deleted long ago, or to something run by hand. To trash one you have to type its name.', 'axle-leftovers' ) . '</p>';
 		if ( ! $items ) {
-			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No unknown items.', 'axle-leftovers' ) . '</p></div>';
+			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No unknown items. Items that nothing points to, such as a table from a plugin deleted long ago, show up here, and you type a name to move one to the trash.', 'axle-leftovers' ) . '</p>';
+			if ( ! Settings::online_lookup() ) {
+				echo '<p><a class="button" href="' . esc_url( self::url( 'settings', $network ) ) . '">' . esc_html__( 'Open settings to turn on the online lookup', 'axle-leftovers' ) . '</a></p>';
+			}
+			echo '</div>';
 			return;
 		}
 		if ( Settings::online_lookup() ) {
@@ -367,12 +608,13 @@ final class Page implements Service {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-trash-form">';
 		$this->hidden( 'trash', $network );
 		echo '<input type="hidden" name="tab" value="' . esc_attr( 'alo-unknown' === $id ? 'unknown' : '' ) . '">';
+		echo '<div class="axle-scroll" tabindex="0" role="region" aria-label="' . esc_attr__( 'Items, scroll sideways on a narrow screen', 'axle-leftovers' ) . '">';
 		echo '<table class="widefat striped alo-items">';
 		echo '<caption class="screen-reader-text">' . esc_html__( 'Items', 'axle-leftovers' ) . '</caption>';
 		echo '<thead><tr>';
 		echo '<td class="check-column"><input type="checkbox" class="alo-check-all" id="' . esc_attr( $id ) . '-all" aria-label="' . esc_attr__( 'Select all', 'axle-leftovers' ) . '"></td>';
 		echo '<th scope="col">' . esc_html__( 'Item', 'axle-leftovers' ) . '</th>';
-		echo '<th scope="col">' . esc_html__( 'Rows', 'axle-leftovers' ) . '</th>';
+		echo '<th scope="col">' . esc_html__( 'Rows or posts', 'axle-leftovers' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Size', 'axle-leftovers' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Confidence and evidence', 'axle-leftovers' ) . '</th>';
 		echo '<th scope="col">' . esc_html__( 'Reference check', 'axle-leftovers' ) . '</th>';
@@ -404,11 +646,7 @@ final class Page implements Service {
 			echo '<td>' . esc_html( Display::size( (int) $item['bytes'] ) ) . '</td>';
 			echo '<td>' . Display::badge( $item['confidence'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			if ( $item['evidence'] ) {
-				echo '<ul class="alo-evidence">';
-				foreach ( $item['evidence'] as $evidence ) {
-					echo '<li>' . esc_html( $evidence['text'] ) . '</li>';
-				}
-				echo '</ul>';
+				echo '<ul class="alo-evidence">' . Display::evidence( $item['evidence'] ) . '</ul>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			}
 			$this->lookup_cell( $item );
 			echo '</td><td>';
@@ -420,7 +658,7 @@ final class Page implements Service {
 			}
 			echo '</td></tr>';
 		}
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
 		echo '<div class="alo-confirm-names" hidden></div>';
 		echo '<p><button type="submit" class="button' . ( $unknown ? ' button-primary' : '' ) . ' alo-trash-button">' . esc_html__( 'Move selected to trash', 'axle-leftovers' ) . '</button></p>';
 		echo '</form>';
@@ -509,25 +747,20 @@ final class Page implements Service {
 			echo '<section class="axle-card alo-batch" aria-labelledby="' . esc_attr( $heading ) . '" data-batch="' . esc_attr( $batch['batch'] ) . '">';
 			/* translators: %s: batch ID. */
 			echo '<h2 class="axle-card__title" id="' . esc_attr( $heading ) . '">' . esc_html( sprintf( __( 'Batch %s', 'axle-leftovers' ), $batch['batch'] ) ) . '</h2>';
-			echo '<p class="axle-muted alo-meta">' . esc_html(
-				sprintf(
-					/* translators: 1: date, 2: user name, 3: size. */
-					__( 'Trashed %1$s by %2$s, %3$s.', 'axle-leftovers' ),
-					Display::date( (string) $batch['trashed_gmt'] ),
-					$user ? $user->display_name : __( 'WP-CLI or a deleted user', 'axle-leftovers' ),
-					Display::size( (int) $batch['bytes'] )
-				)
-			) . '</p>';
+			/* translators: 1: user name, 2: size. */
+			echo '<p class="axle-muted alo-meta">' . esc_html__( 'Trashed:', 'axle-leftovers' ) . ' ' . Display::time( (string) $batch['trashed_gmt'] ) . ' ' . esc_html( sprintf( __( 'by %1$s, %2$s.', 'axle-leftovers' ), $user ? $user->display_name : __( 'WP-CLI or a deleted user', 'axle-leftovers' ), Display::size( (int) $batch['bytes'] ) ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 			$this->hidden( 'batch', $network );
 			echo '<input type="hidden" name="batch" value="' . esc_attr( $batch['batch'] ) . '">';
+			echo '<div class="axle-scroll" tabindex="0" role="region" aria-label="' . esc_attr__( 'Items in this batch, scroll sideways on a narrow screen', 'axle-leftovers' ) . '">';
 			echo '<table class="widefat striped alo-trash-items"><caption class="screen-reader-text">' . esc_html__( 'Items in this batch', 'axle-leftovers' ) . '</caption><thead><tr>';
-			echo '<th scope="col">' . esc_html__( 'Item', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Owner', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Size', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Export', 'axle-leftovers' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'axle-leftovers' ) . '</span></th>';
+			echo '<th scope="col">' . esc_html__( 'Item', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Owner', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Where it is now', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Size', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Export', 'axle-leftovers' ) . '</th><th scope="col"><span class="screen-reader-text">' . esc_html__( 'Actions', 'axle-leftovers' ) . '</span></th>';
 			echo '</tr></thead><tbody>';
 			foreach ( $batch['items'] as $row ) {
 				echo '<tr data-trash-id="' . esc_attr( (string) $row['id'] ) . '">';
 				echo '<td><code>' . esc_html( $row['name'] ) . '</code><br><span class="axle-muted alo-type">' . esc_html( Display::type( $row['item_type'] ) ) . '</span></td>';
 				echo '<td>' . esc_html( '' !== $row['owner_slug'] ? $this->scanner->attribution()->owner_name( (string) $row['owner_slug'] ) : __( 'Unknown', 'axle-leftovers' ) ) . '</td>';
+				echo '<td>' . $this->moved_to( $row ) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in moved_to().
 				echo '<td>' . esc_html( Display::size( (int) $row['size_bytes'] ) ) . '</td>';
 				echo '<td>';
 				if ( '' !== $this->trash->export_file( $row ) ) {
@@ -544,9 +777,9 @@ final class Page implements Service {
 				echo '<td><button type="submit" class="button-link" name="item" value="' . esc_attr( (string) $row['id'] ) . '" aria-label="' . esc_attr( sprintf( __( 'Restore %s', 'axle-leftovers' ), $row['name'] ) ) . '">' . esc_html__( 'Restore', 'axle-leftovers' ) . '</button></td>';
 				echo '</tr>';
 			}
-			echo '</tbody></table>';
+			echo '</tbody></table></div>';
 			echo '<p class="axle-actions alo-batch-actions"><button type="submit" class="button" name="do_batch" value="restore">' . esc_html__( 'Restore batch', 'axle-leftovers' ) . '</button> ';
-			echo '<button type="submit" class="button axle-button--danger" name="do_batch" value="purge" data-alo-confirm="' . esc_attr__( 'Delete this batch for good? This cannot be undone.', 'axle-leftovers' ) . '">' . esc_html__( 'Purge batch', 'axle-leftovers' ) . '</button></p>';
+			echo '<button type="submit" class="button axle-button--danger alo-purge-batch" name="do_batch" value="purge" data-alo-confirm="' . esc_attr__( 'Every item in this batch is deleted for good, including renamed tables and moved folders. This cannot be undone.', 'axle-leftovers' ) . '" data-alo-confirm-title="' . esc_attr__( 'Delete this batch for good?', 'axle-leftovers' ) . '" data-alo-confirm-label="' . esc_attr__( 'Delete for good', 'axle-leftovers' ) . '">' . esc_html__( 'Delete batch for good', 'axle-leftovers' ) . '</button></p>';
 			echo '</form>';
 			echo '</section>';
 		}
@@ -556,9 +789,26 @@ final class Page implements Service {
 		echo '<p>' . esc_html__( 'Deletes every trashed item for good, including the tables and uploads folders. This cannot be undone.', 'axle-leftovers' ) . '</p>';
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-empty-form">';
 		$this->hidden( 'empty', $network );
-		echo '<button type="submit" class="button axle-button--danger alo-empty-trash" data-alo-confirm="' . esc_attr__( 'Delete everything in the trash for good? This cannot be undone.', 'axle-leftovers' ) . '">' . esc_html__( 'Empty trash', 'axle-leftovers' ) . '</button>';
+		echo '<p class="axle-actions"><button type="submit" class="button axle-button--danger alo-empty-trash" data-alo-confirm="' . esc_attr__( 'Every item in the trash is deleted for good, in all batches. This cannot be undone.', 'axle-leftovers' ) . '" data-alo-confirm-title="' . esc_attr__( 'Empty the trash?', 'axle-leftovers' ) . '" data-alo-confirm-label="' . esc_attr__( 'Empty trash', 'axle-leftovers' ) . '">' . esc_html__( 'Empty trash', 'axle-leftovers' ) . '</button></p>';
 		echo '</form>';
 		echo '</section>';
+	}
+
+	/**
+	 * Where a trashed item is now: a renamed table or a moved folder as before and after, otherwise a short note.
+	 *
+	 * @param array $row Trash row.
+	 * @return string HTML.
+	 */
+	private function moved_to( array $row ): string {
+		$where = (string) $row['trash_location'];
+		if ( in_array( $row['item_type'], array( 'table', 'folder' ), true ) && '' !== $where ) {
+			$after = 'folder' === $row['item_type'] ? 'uploads/axle-leftovers/' . $where : $where;
+
+			return '<div class="axle-diff"><del><span class="screen-reader-text">' . esc_html__( 'Before:', 'axle-leftovers' ) . '</span> ' . esc_html( (string) $row['name'] ) . '</del><ins><span class="screen-reader-text">' . esc_html__( 'After:', 'axle-leftovers' ) . '</span> ' . esc_html( $after ) . '</ins></div>';
+		}
+
+		return esc_html__( 'Copied out and removed', 'axle-leftovers' );
 	}
 
 	/**
@@ -566,14 +816,16 @@ final class Page implements Service {
 	 */
 	private function render_ledger(): void {
 		$entries = $this->ledger->all();
-		echo '<p class="axle-intro">' . esc_html__( 'Every plugin Leftovers has seen, with the names its code uses. The signature is kept after a plugin is deleted, even over FTP, so its leftovers can still be found.', 'axle-leftovers' ) . '</p>';
-		echo '<div class="axle-actions">';
-		$this->action_form( 'rescan', __( 'Read all installed plugins again', 'axle-leftovers' ), false );
-		echo '</div>';
+		echo '<p class="axle-intro">' . esc_html__( 'Every plugin and theme Leftovers has seen, with the names its code uses. The signature is kept after a plugin or theme is deleted, even over FTP, so its leftovers can still be found.', 'axle-leftovers' ) . '</p>';
 		if ( ! $entries ) {
-			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No plugins recorded yet. The first scan adds every installed plugin.', 'axle-leftovers' ) . '</p></div>';
+			echo '<div class="axle-empty alo-empty"><p>' . esc_html__( 'No plugins or themes recorded yet. The first scan adds every installed one, and the list grows as you install, update and delete them.', 'axle-leftovers' ) . '</p>';
+			$this->action_form( 'scan', __( 'Scan now', 'axle-leftovers' ), false );
+			echo '</div>';
 			return;
 		}
+		echo '<div class="axle-toolbar"><span class="axle-toolbar__end">';
+		$this->action_form( 'rescan', __( 'Read all installed plugins and themes again', 'axle-leftovers' ), false );
+		echo '</span></div>';
 
 		$labels = array(
 			't' => __( 'Tables', 'axle-leftovers' ),
@@ -584,13 +836,15 @@ final class Page implements Service {
 			'u' => __( 'Uploads', 'axle-leftovers' ),
 			'p' => __( 'Prefixes', 'axle-leftovers' ),
 		);
-		echo '<table class="widefat striped alo-ledger"><caption class="screen-reader-text">' . esc_html__( 'Plugins seen', 'axle-leftovers' ) . '</caption><thead><tr>';
-		echo '<th scope="col">' . esc_html__( 'Plugin', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Status', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'First seen', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Sources', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Signature', 'axle-leftovers' ) . '</th>';
+		echo '<div class="axle-scroll" tabindex="0" role="region" aria-label="' . esc_attr__( 'Plugins and themes seen, scroll sideways on a narrow screen', 'axle-leftovers' ) . '">';
+		echo '<table class="widefat striped alo-ledger"><caption class="screen-reader-text">' . esc_html__( 'Plugins and themes seen', 'axle-leftovers' ) . '</caption><thead><tr>';
+		echo '<th scope="col">' . esc_html__( 'Plugin or theme', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Status', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'First seen', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Sources', 'axle-leftovers' ) . '</th><th scope="col">' . esc_html__( 'Signature', 'axle-leftovers' ) . '</th>';
 		echo '</tr></thead><tbody>';
 		foreach ( $entries as $entry ) {
 			$signature = is_array( $entry['signature'] ) ? $entry['signature'] : Signature::blank();
-			echo '<tr data-slug="' . esc_attr( $entry['slug'] ) . '"><td><strong>' . esc_html( $entry['name'] ) . '</strong><br><code>' . esc_html( $entry['slug'] ) . '</code></td>';
-			echo '<td>' . esc_html( Display::removed( $entry ) ) . '</td>';
+			$is_theme  = 0 === strpos( (string) $entry['slug'], 'theme:' );
+			echo '<tr data-slug="' . esc_attr( $entry['slug'] ) . '"><td><strong>' . esc_html( $entry['name'] ) . '</strong> <span class="axle-badge axle-badge--neutral">' . esc_html( $is_theme ? __( 'Theme', 'axle-leftovers' ) : __( 'Plugin', 'axle-leftovers' ) ) . '</span><br><code>' . esc_html( $entry['slug'] ) . '</code></td>';
+			echo '<td>' . Display::removed( $entry, $is_theme ? 'theme' : 'plugin' ) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			echo '<td>' . Display::time( (string) $entry['first_seen_gmt'] ) . '</td>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display.
 			echo '<td>' . esc_html( implode( ', ', $entry['sources'] ) ) . '</td><td>';
 			$parts = array();
@@ -604,12 +858,12 @@ final class Page implements Service {
 				echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form">';
 				$this->hidden( 'rescan', false );
 				echo '<input type="hidden" name="slug" value="' . esc_attr( $entry['slug'] ) . '">';
-				/* translators: %s: plugin name. */
-				echo '<button type="submit" class="button-link" aria-label="' . esc_attr( sprintf( __( 'Rescan %s', 'axle-leftovers' ), $entry['name'] ) ) . '">' . esc_html__( 'Rescan', 'axle-leftovers' ) . '</button></form>';
+				/* translators: %s: plugin or theme name. */
+				echo '<button type="submit" class="button-link" aria-label="' . esc_attr( sprintf( __( 'Read again: %s', 'axle-leftovers' ), $entry['name'] ) ) . '">' . esc_html__( 'Read again', 'axle-leftovers' ) . '</button></form>';
 			}
 			echo '</td></tr>';
 		}
-		echo '</tbody></table>';
+		echo '</tbody></table></div>';
 	}
 
 	/**
@@ -649,11 +903,11 @@ final class Page implements Service {
 		echo '<h2 class="axle-card__title">' . esc_html__( 'Signature list', 'axle-leftovers' ) . '</h2>';
 		echo '<ul class="ul-disc alo-dataset-info">';
 		/* translators: 1: number of plugins, 2: date. */
-		echo '<li class="alo-dataset-bundled">' . esc_html( sprintf( __( 'Bundled list: %1$s plugins, built %2$s.', 'axle-leftovers' ), number_format_i18n( $info['bundled_count'] ), '' !== $info['bundled_built'] ? $info['bundled_built'] : __( 'on an unknown date', 'axle-leftovers' ) ) ) . '</li>';
+		echo '<li class="alo-dataset-bundled">' . sprintf( esc_html__( 'Bundled list: %1$s plugins, built %2$s.', 'axle-leftovers' ), esc_html( number_format_i18n( $info['bundled_count'] ) ), '' !== $info['bundled_built'] ? Display::time( (string) $info['bundled_built'] ) : esc_html__( 'on an unknown date', 'axle-leftovers' ) ) . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display and above.
 		if ( $info['downloaded'] ) {
 			/* translators: 1: number of plugins, 2: build date, 3: download date. */
-			echo '<li class="alo-dataset-full">' . esc_html( sprintf( __( 'Full list: %1$s plugins, built %2$s, downloaded %3$s.', 'axle-leftovers' ), number_format_i18n( (int) $info['downloaded']['count'] ), $info['downloaded']['built'], Display::date( (string) ( $info['downloaded']['fetched_gmt'] ?? '' ) ) ) );
-			$this->action_form( 'dataset_remove', __( 'Delete downloaded list', 'axle-leftovers' ), false, __( 'Delete the downloaded list? The bundled list is used instead. You can download it again later.', 'axle-leftovers' ) );
+			echo '<li class="alo-dataset-full">' . sprintf( esc_html__( 'Full list: %1$s plugins, built %2$s, downloaded %3$s.', 'axle-leftovers' ), esc_html( number_format_i18n( (int) $info['downloaded']['count'] ) ), Display::time( (string) $info['downloaded']['built'] ), Display::time( (string) ( $info['downloaded']['fetched_gmt'] ?? '' ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Escaped in Display and above.
+			$this->action_form( 'dataset_remove', __( 'Delete downloaded list', 'axle-leftovers' ), false, __( 'The downloaded list is deleted and the bundled list is used instead. You can download it again later.', 'axle-leftovers' ), __( 'Delete the downloaded list?', 'axle-leftovers' ), __( 'Delete the list', 'axle-leftovers' ) );
 			echo '</li>';
 		} else {
 			echo '<li class="alo-dataset-full">' . esc_html__( 'Full list: not downloaded.', 'axle-leftovers' ) . '</li>';
@@ -670,17 +924,17 @@ final class Page implements Service {
 	}
 
 	/**
-	 * The confirmation modal the script fills in.
+	 * The in-place confirm step the script fills in and moves under the button that asked.
 	 */
-	private function render_modal(): void {
-		echo '<dialog class="alo-modal" id="alo-confirm" aria-labelledby="alo-confirm-title" aria-describedby="alo-confirm-message">';
-		echo '<h2 id="alo-confirm-title">' . esc_html__( 'Move to trash', 'axle-leftovers' ) . '</h2>';
+	private function render_confirm(): void {
+		echo '<div class="axle-confirm" id="alo-confirm" role="group" aria-labelledby="alo-confirm-title" hidden>';
+		echo '<strong id="alo-confirm-title" tabindex="-1"></strong>';
 		echo '<p id="alo-confirm-message"></p>';
 		echo '<ul class="alo-confirm-list"></ul>';
 		echo '<div class="alo-confirm-typed"></div>';
 		echo '<p class="alo-confirm-error" role="alert"></p>';
-		echo '<p class="alo-modal-actions"><button type="button" class="button button-primary alo-confirm-ok">' . esc_html__( 'Move to trash', 'axle-leftovers' ) . '</button> <button type="button" class="button alo-confirm-cancel">' . esc_html__( 'Cancel', 'axle-leftovers' ) . '</button></p>';
-		echo '</dialog>';
+		echo '<p class="axle-actions"><button type="button" class="button button-primary alo-confirm-ok"></button> <button type="button" class="button alo-confirm-cancel">' . esc_html__( 'Cancel', 'axle-leftovers' ) . '</button></p>';
+		echo '</div>';
 	}
 
 	/**
@@ -689,12 +943,14 @@ final class Page implements Service {
 	 * @param string $action  Action.
 	 * @param string $label   Button label.
 	 * @param bool   $network Network screen.
-	 * @param string $confirm Question to ask before submitting. Default: none.
+	 * @param string $confirm What will change and whether it can be undone, asked in place before submitting. Default: no question.
+	 * @param string $title   The question's title, with a confirm text.
+	 * @param string $ok      The label of the confirm button, with a confirm text.
 	 */
-	private function action_form( string $action, string $label, bool $network, string $confirm = '' ): void {
+	private function action_form( string $action, string $label, bool $network, string $confirm = '', string $title = '', string $ok = '' ): void {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form alo-' . esc_attr( $action ) . '-form">';
 		$this->hidden( $action, $network );
-		echo '<button type="submit" class="button"' . ( '' !== $confirm ? ' data-alo-confirm="' . esc_attr( $confirm ) . '"' : '' ) . '>' . esc_html( $label ) . '</button>';
+		echo '<button type="submit" class="button"' . ( '' !== $confirm ? ' data-alo-confirm="' . esc_attr( $confirm ) . '" data-alo-confirm-title="' . esc_attr( $title ) . '" data-alo-confirm-label="' . esc_attr( '' !== $ok ? $ok : $label ) . '"' : '' ) . '>' . esc_html( $label ) . '</button>';
 		echo '</form>';
 	}
 
@@ -726,6 +982,8 @@ final class Page implements Service {
 
 		$do  = isset( $_POST['do'] ) ? sanitize_key( wp_unslash( $_POST['do'] ) ) : '';
 		$tab = '';
+
+		$this->network = $network;
 		if ( $network ) {
 			switch_to_blog( get_main_site_id() );
 		}
@@ -773,7 +1031,7 @@ final class Page implements Service {
 						$this->set_flash( 'error', $result->get_error_message() );
 					} else {
 						/* translators: %d: number of items. */
-						$this->set_flash( 'success', sprintf( _n( 'Deleted %d item for good.', 'Deleted %d items for good.', count( $result ), 'axle-leftovers' ), count( $result ) ) );
+						$this->set_flash( 'success', sprintf( _n( 'Deleted %d item for good. This cannot be undone.', 'Deleted %d items for good. This cannot be undone.', count( $result ), 'axle-leftovers' ), count( $result ) ) );
 					}
 				} else {
 					$this->restore_flash( $this->trash->restore( $batch ) );
@@ -787,7 +1045,7 @@ final class Page implements Service {
 					$this->set_flash( 'error', $result->get_error_message() );
 				} else {
 					/* translators: %d: number of items. */
-					$this->set_flash( 'success', sprintf( _n( 'Deleted %d item for good.', 'Deleted %d items for good.', count( $result ), 'axle-leftovers' ), count( $result ) ) );
+					$this->set_flash( 'success', sprintf( _n( 'Deleted %d item for good. This cannot be undone.', 'Deleted %d items for good. This cannot be undone.', count( $result ), 'axle-leftovers' ), count( $result ) ) );
 				}
 				break;
 
@@ -815,16 +1073,27 @@ final class Page implements Service {
 				if ( '' === $slug ) {
 					$this->scanner->start( true );
 					$this->scanner->step( 15.0 );
-					$this->set_flash( 'success', __( 'Reading every installed plugin again.', 'axle-leftovers' ) );
+					$this->set_flash( 'success', __( 'Reading every installed plugin and theme again.', 'axle-leftovers' ) );
 				} else {
 					$entry = $this->ledger->get( $slug );
 					if ( $entry && null === $entry['removed_gmt'] ) {
-						$this->recorder->ensure_signature( (string) $entry['plugin_file'], true );
+						if ( 0 === strpos( $slug, 'theme:' ) ) {
+							$this->recorder->ensure_theme_signature( substr( $slug, 6 ), true );
+						} else {
+							$this->recorder->ensure_signature( (string) $entry['plugin_file'], true );
+						}
 						Scanner::mark_stale();
-						/* translators: %s: plugin name. */
+						/* translators: %s: plugin or theme name. */
 						$this->set_flash( 'success', sprintf( __( 'Read %s again.', 'axle-leftovers' ), $entry['name'] ) );
+					} else {
+						$this->set_flash( 'warning', __( 'That plugin or theme is not installed any more, so its code cannot be read again. The signature kept in the ledger is still used.', 'axle-leftovers' ) );
 					}
 				}
+				break;
+
+			case 'dismiss_steps':
+				update_user_meta( get_current_user_id(), self::STEPS_META, '1' );
+				$this->set_flash( 'success', __( 'Hid the Get started card. The Help tab at the top of the screen explains how Leftovers works.', 'axle-leftovers' ) );
 				break;
 
 			case 'lookup':
@@ -932,13 +1201,14 @@ final class Page implements Service {
 				'text'    => $text,
 				'event'   => $event,
 				'payload' => $payload,
+				'network' => $this->network,
 			),
 			MINUTE_IN_SECONDS * 5
 		);
 	}
 
 	/**
-	 * Prints and clears the stored message.
+	 * Prints and clears the stored message. After a trash it offers Undo.
 	 */
 	private function flash(): void {
 		$key   = 'axle_leftovers_flash_' . get_current_user_id();
@@ -950,11 +1220,19 @@ final class Page implements Service {
 
 		$class = in_array( $flash['type'], array( 'success', 'warning', 'error' ), true ) ? $flash['type'] : 'info';
 		printf(
-			'<div class="notice notice-%1$s alo-notice"%2$s role="%3$s"><p>%4$s</p></div>',
+			'<div class="notice notice-%1$s alo-notice"%2$s data-alo-tone="%3$s" role="%4$s"><p>%5$s',
 			esc_attr( $class ),
 			'' !== $flash['event'] ? ' data-alo-event="' . esc_attr( $flash['event'] ) . '" data-alo-payload="' . esc_attr( (string) wp_json_encode( $flash['payload'] ) ) . '"' : '',
+			esc_attr( $class ),
 			'error' === $class ? 'alert' : 'status',
 			esc_html( $flash['text'] )
 		);
+		if ( 'trashed' === $flash['event'] && ! empty( $flash['payload']['batch'] ) ) {
+			echo ' <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form alo-undo-form">';
+			$this->hidden( 'batch', ! empty( $flash['network'] ) );
+			echo '<input type="hidden" name="batch" value="' . esc_attr( (string) $flash['payload']['batch'] ) . '">';
+			echo '<button type="submit" class="button-link alo-undo">' . esc_html__( 'Undo', 'axle-leftovers' ) . '</button></form>';
+		}
+		echo '</p></div>';
 	}
 }

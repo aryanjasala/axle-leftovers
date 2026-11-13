@@ -43,14 +43,8 @@ final class Display {
 	 */
 	public static function time( string $gmt ): string {
 		$time = '' === $gmt || 0 === strpos( $gmt, '0000' ) ? false : strtotime( $gmt . ' UTC' );
-		if ( ! $time ) {
-			return '';
-		}
-		$now = time();
-		/* translators: %s: a time span such as "5 minutes". */
-		$text = $time > $now ? sprintf( __( 'in %s', 'axle-leftovers' ), human_time_diff( $now, $time ) ) : sprintf( __( '%s ago', 'axle-leftovers' ), human_time_diff( $time, $now ) );
 
-		return '<time datetime="' . esc_attr( gmdate( 'c', $time ) ) . '" title="' . esc_attr( self::date( $gmt ) ) . '">' . esc_html( $text ) . '</time>';
+		return $time ? AxleUi::relative_time( (int) $time ) : '';
 	}
 
 	/**
@@ -83,6 +77,18 @@ final class Display {
 				case 'folder':
 					/* translators: %s: number of folders. */
 					$parts[] = sprintf( _n( '%s uploads folder', '%s uploads folders', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+					break;
+				case 'template':
+					/* translators: %s: number of changes made to templates and template parts. */
+					$parts[] = sprintf( _n( '%s template change', '%s template changes', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+					break;
+				case 'globalstyles':
+					/* translators: %s: number of global styles entries. */
+					$parts[] = sprintf( _n( '%s global styles change', '%s global styles changes', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
+					break;
+				case 'customcss':
+					/* translators: %s: number of custom CSS entries. */
+					$parts[] = sprintf( _n( '%s custom CSS entry', '%s custom CSS entries', $count, 'axle-leftovers' ), number_format_i18n( $count ) );
 					break;
 				case 'role':
 					/* translators: %s: number of roles. */
@@ -118,21 +124,6 @@ final class Display {
 	}
 
 	/**
-	 * A GMT date in the site's format and time zone.
-	 *
-	 * @param string $gmt MySQL datetime in GMT.
-	 * @return string Plain text.
-	 */
-	public static function date( string $gmt ): string {
-		if ( '' === $gmt || 0 === strpos( $gmt, '0000' ) ) {
-			return '';
-		}
-		$time = strtotime( $gmt . ' UTC' );
-
-		return false === $time ? $gmt : wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $time );
-	}
-
-	/**
 	 * Translated type label.
 	 *
 	 * @param string $type Type.
@@ -145,32 +136,52 @@ final class Display {
 	}
 
 	/**
-	 * How a plugin was removed.
+	 * How a plugin or theme was removed.
 	 *
 	 * @param array|null $entry Ledger entry.
-	 * @return string Plain text.
+	 * @param string     $kind  plugin or theme.
+	 * @return string HTML.
 	 */
-	public static function removed( ?array $entry ): string {
+	public static function removed( ?array $entry, string $kind = 'plugin' ): string {
 		if ( ! $entry ) {
-			return __( 'Deleted before Leftovers was installed. Known from the bundled dataset.', 'axle-leftovers' );
+			return 'theme' === $kind ? esc_html__( 'Deleted before Leftovers was installed. Found from its name.', 'axle-leftovers' ) : esc_html__( 'Deleted before Leftovers was installed. Known from the bundled dataset.', 'axle-leftovers' );
 		}
 		$parts = array();
 		if ( '' !== (string) $entry['version'] ) {
 			/* translators: %s: version. */
-			$parts[] = sprintf( __( 'Last version %s.', 'axle-leftovers' ), $entry['version'] );
+			$parts[] = esc_html( sprintf( __( 'Last version %s.', 'axle-leftovers' ), $entry['version'] ) );
 		}
 		if ( null === $entry['removed_gmt'] ) {
-			$parts[] = __( 'Still installed.', 'axle-leftovers' );
+			$parts[] = esc_html__( 'Still installed.', 'axle-leftovers' );
 		} else {
 			$how = array(
 				'admin'   => __( 'from wp-admin', 'axle-leftovers' ),
 				'cli'     => __( 'with WP-CLI', 'axle-leftovers' ),
 				'outside' => __( 'outside WordPress (the folder disappeared)', 'axle-leftovers' ),
 			);
-			/* translators: 1: date, 2: how, such as "from wp-admin". */
-			$parts[] = sprintf( __( 'Deleted %1$s, %2$s.', 'axle-leftovers' ), self::date( (string) $entry['removed_gmt'] ), $how[ $entry['removed_how'] ] ?? $entry['removed_how'] );
+			/* translators: %s: how it was deleted, such as "from wp-admin". */
+			$parts[] = esc_html( sprintf( __( 'Deleted %s:', 'axle-leftovers' ), $how[ $entry['removed_how'] ] ?? $entry['removed_how'] ) ) . ' ' . self::time( (string) $entry['removed_gmt'] ) . '.';
 		}
 
 		return implode( ' ', $parts );
+	}
+
+	/**
+	 * The evidence of an item as list items, with the time of each in relative form.
+	 *
+	 * @param array $evidence Evidence entries: text, and when (GMT) for some.
+	 * @return string HTML.
+	 */
+	public static function evidence( array $evidence ): string {
+		$out = '';
+		foreach ( $evidence as $line ) {
+			$out .= '<li>' . esc_html( (string) $line['text'] );
+			if ( ! empty( $line['when'] ) ) {
+				$out .= ' (' . self::time( (string) $line['when'] ) . ')';
+			}
+			$out .= '</li>';
+		}
+
+		return $out;
 	}
 }

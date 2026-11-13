@@ -63,6 +63,7 @@ final class Core {
 	 */
 	public static function flush(): void {
 		self::$cache = null;
+		Themes::flush();
 	}
 
 	/**
@@ -175,6 +176,14 @@ final class Core {
 		global $wpdb;
 
 		$patterns = array();
+		if ( Themes::is_content_type( $type ) ) {
+			// Templates, global styles and custom CSS belong to a theme: only an installed theme's are core's business.
+			return Themes::is_installed( $name );
+		}
+		if ( 'option' === $type && preg_match( '/^theme_mods_(.+)$/', $name, $theme ) ) {
+			// Theme settings are WordPress's own, until the theme is gone.
+			return Themes::is_installed( $theme[1] );
+		}
 		if ( 'option' === $type || 'sitemeta' === $type ) {
 			$patterns = self::OPTION_PATTERNS;
 		} elseif ( 'usermeta' === $type ) {

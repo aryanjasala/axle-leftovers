@@ -63,7 +63,17 @@ final class Settings {
 	 * @param array $input Raw values.
 	 */
 	public static function save( array $input ): void {
-		update_option( self::OPTION, self::sanitize( $input ), true );
+		$old = self::all();
+		$new = self::sanitize( $input );
+		update_option( self::OPTION, $new, true );
+
+		/**
+		 * Fires after the settings are saved, from the screen, WP-CLI or an ability.
+		 *
+		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset.
+		 * @param array $old The settings before.
+		 */
+		do_action( 'axle_leftovers_settings_saved', $new, $old );
 	}
 
 	/**
@@ -84,6 +94,59 @@ final class Settings {
 		$capability = (string) apply_filters( 'axle_leftovers_capability', $default, $network );
 
 		return '' !== trim( $capability ) ? $capability : $default;
+	}
+
+	/**
+	 * The capability an item type needs on top of the screen's own, for
+	 * things that belong to other parts of WordPress: theme content needs
+	 * what the Site Editor and the Customizer need, roles and users need
+	 * what the Users screen needs.
+	 *
+	 * @param string $type Item type.
+	 * @return string The base capability for types with no extra requirement.
+	 */
+	public static function item_capability( string $type ): string {
+		$extra = array(
+			'template'     => 'edit_theme_options',
+			'globalstyles' => 'edit_theme_options',
+			'customcss'    => 'edit_css',
+			'role'         => 'promote_users',
+			'cap'          => 'promote_users',
+			'usermeta'     => 'edit_users',
+		);
+		$cap   = $extra[ $type ] ?? self::capability( 'sitemeta' === $type );
+
+		/**
+		 * Filters the capability needed to see and trash items of one type.
+		 * It is checked in addition to `axle_leftovers_capability`, on the
+		 * screen, in REST, in abilities and in WP-CLI when a user is set.
+		 *
+		 * @param string $cap  Capability. Default: `edit_theme_options` for theme templates and global styles, `edit_css` for theme custom CSS, `promote_users` for roles and capabilities, `edit_users` for user meta, otherwise the plugin's capability.
+		 * @param string $type Item type.
+		 */
+		$filtered = (string) apply_filters( 'axle_leftovers_item_capability', $cap, $type );
+
+		return '' !== trim( $filtered ) ? $filtered : $cap;
+	}
+
+	/**
+	 * Whether the current user may see and trash an item of a type. Without a
+	 * user (WP-CLI, WP-Cron) it is always true: the command line is trusted.
+	 *
+	 * @param string $type  Item type.
+	 * @param string $scope site or network.
+	 * @return bool
+	 */
+	public static function user_can_item( string $type, string $scope = 'site' ): bool {
+		if ( get_current_user_id() < 1 ) {
+			return true;
+		}
+		if ( 'network' === $scope && ! current_user_can( self::capability( true ) ) ) {
+			return false;
+		}
+		$cap = self::item_capability( $type );
+
+		return self::capability( 'sitemeta' === $type ) === $cap || current_user_can( $cap );
 	}
 
 	/**
@@ -200,6 +263,21 @@ final class Settings {
 	}
 
 	/**
+	 * Posts copied, deleted or re-inserted per query for theme content.
+	 *
+	 * @return int
+	 */
+	public static function post_batch_size(): int {
+		/**
+		 * Filters how many posts are copied, deleted or restored per query
+		 * when moving theme content to the trash.
+		 *
+		 * @param int $size Posts, 10 to 5000. Default 500.
+		 */
+		return max( 10, min( 5000, (int) apply_filters( 'axle_leftovers_post_batch_size', 500 ) ) );
+	}
+
+	/**
 	 * Meta rows copied, deleted or re-inserted per query.
 	 *
 	 * @return int
@@ -286,17 +364,20 @@ final class Settings {
 	 */
 	public static function item_types(): array {
 		$types = array(
-			'table'       => __( 'Table', 'axle-leftovers' ),
-			'option'      => __( 'Option', 'axle-leftovers' ),
-			'cron'        => __( 'Cron event', 'axle-leftovers' ),
-			'postmeta'    => __( 'Post meta', 'axle-leftovers' ),
-			'usermeta'    => __( 'User meta', 'axle-leftovers' ),
-			'termmeta'    => __( 'Term meta', 'axle-leftovers' ),
-			'commentmeta' => __( 'Comment meta', 'axle-leftovers' ),
-			'folder'      => __( 'Uploads folder', 'axle-leftovers' ),
-			'role'        => __( 'Role', 'axle-leftovers' ),
-			'cap'         => __( 'Capability', 'axle-leftovers' ),
-			'sitemeta'    => __( 'Network option', 'axle-leftovers' ),
+			'table'        => __( 'Table', 'axle-leftovers' ),
+			'option'       => __( 'Option', 'axle-leftovers' ),
+			'cron'         => __( 'Cron event', 'axle-leftovers' ),
+			'postmeta'     => __( 'Post meta', 'axle-leftovers' ),
+			'usermeta'     => __( 'User meta', 'axle-leftovers' ),
+			'termmeta'     => __( 'Term meta', 'axle-leftovers' ),
+			'commentmeta'  => __( 'Comment meta', 'axle-leftovers' ),
+			'folder'       => __( 'Uploads folder', 'axle-leftovers' ),
+			'template'     => __( 'Theme templates', 'axle-leftovers' ),
+			'globalstyles' => __( 'Theme global styles', 'axle-leftovers' ),
+			'customcss'    => __( 'Theme custom CSS', 'axle-leftovers' ),
+			'role'         => __( 'Role', 'axle-leftovers' ),
+			'cap'          => __( 'Capability', 'axle-leftovers' ),
+			'sitemeta'     => __( 'Network option', 'axle-leftovers' ),
 		);
 
 		/**

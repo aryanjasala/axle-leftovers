@@ -40,7 +40,7 @@ test.describe( 'Online lookup and the full list', () => {
 		await expect( page.getByLabel( /Show a Look it up button/ ) ).not.toBeChecked();
 		await expect( page.getByLabel( /Allow downloading the full signature list/ ) ).not.toBeChecked();
 		await expect( page.getByRole( 'button', { name: 'Download the full list' } ) ).toHaveCount( 0 );
-		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( /Bundled list: \d+ plugins, built 20/ );
+		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( /Bundled list: \d+ plugins, built .+ ago\./ );
 		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
 
 		expect( seed.httpLog() ).toEqual( [] );
@@ -71,7 +71,7 @@ test.describe( 'Online lookup and the full list', () => {
 
 		// The item left the Unknown tab and sits on Acme Widgets' card.
 		await expect( row( page, 'lmx_unique_setting' ) ).toHaveCount( 0 );
-		await page.getByRole( 'link', { name: /By plugin/ } ).click();
+		await page.getByRole( 'link', { name: /By owner/ } ).click();
 		const card = page.locator( '.alo-card[data-owner="acme-widgets"]' );
 		await expect( card ).toContainText( 'Acme Widgets' );
 		await card.getByText( 'Review and move to trash' ).click();
@@ -93,7 +93,7 @@ test.describe( 'Online lookup and the full list', () => {
 		await row( page, 'lmx_shared_setting' ).getByRole( 'button', { name: /Look it up: lmx_shared_setting/ } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( '2 plugins name it. The most installed is Big Widgets (Guess)' );
 
-		await page.getByRole( 'link', { name: /By plugin/ } ).click();
+		await page.getByRole( 'link', { name: /By owner/ } ).click();
 		const card = page.locator( '.alo-card[data-owner="big-widgets"]' );
 		await card.getByText( 'Review and move to trash' ).click();
 		const candidates = card.locator( '.alo-candidates li' );
@@ -160,7 +160,7 @@ test.describe( 'Online lookup and the full list', () => {
 		await page.goto( SETTINGS );
 		await page.getByRole( 'button', { name: 'Download the full list' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Downloaded the full list: 3 plugins, built 2026-10-01.' );
-		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins, built 2026-10-01, downloaded' );
+		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins, built' );
 		await expect( page.locator( '.alo-dataset-count' ) ).toContainText( /In use: \d+ plugins/ );
 		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'yes' );
 		const meta = JSON.parse( wp( 'option', 'get', 'axle_leftovers_dataset_meta', '--format=json' ) );
@@ -179,8 +179,8 @@ test.describe( 'Online lookup and the full list', () => {
 		expect( status ).toContain( 'Full list: 3 plugins, built 2026-10-01' );
 
 		await page.reload();
-		page.once( 'dialog', ( dialog ) => dialog.accept() );
 		await page.getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await page.locator( '#alo-confirm' ).getByRole( 'button', { name: 'Delete the list' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted the downloaded list' );
 		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
 		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'no' );
@@ -193,19 +193,19 @@ test.describe( 'Online lookup and the full list', () => {
 		wp( 'axle-leftovers', 'dataset', 'download' );
 		wpEval( '$s = get_option( "axle_leftovers_settings", array() ); $s["remote_dataset"] = false; update_option( "axle_leftovers_settings", $s );' );
 		await page.goto( SETTINGS );
-		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins, built 2026-10-01' );
+		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins, built' );
 		await expect( page.getByRole( 'button', { name: 'Download the full list' } ) ).toHaveCount( 0 );
 		await expect( page.locator( '#wpbody' ) ).toContainText( 'Delete downloaded list removes it' );
 
 		// Cancel keeps the list.
-		page.once( 'dialog', ( dialog ) => dialog.dismiss() );
 		await page.locator( '.alo-dataset-full' ).getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await page.locator( '#alo-confirm' ).getByRole( 'button', { name: 'Cancel' } ).click();
 		await expect( page.locator( '.alo-dataset-full' ) ).toContainText( 'Full list: 3 plugins' );
 		expect( wpEval( `echo file_exists( ${ LIST_FILE } ) ? "yes" : "no";` ) ).toBe( 'yes' );
 
 		// OK deletes it, and the bundled list is what is left.
-		page.once( 'dialog', ( dialog ) => dialog.accept() );
 		await page.locator( '.alo-dataset-full' ).getByRole( 'button', { name: 'Delete downloaded list' } ).click();
+		await page.locator( '#alo-confirm' ).getByRole( 'button', { name: 'Delete the list' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted the downloaded list. The bundled list is used.' );
 		await expect( page.locator( '.alo-dataset-full' ) ).toHaveText( 'Full list: not downloaded.' );
 		await expect( page.locator( '.alo-dataset-bundled' ) ).toContainText( 'Bundled list:' );
