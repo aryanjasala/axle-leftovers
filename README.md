@@ -16,7 +16,7 @@
   <a href="https://github.com/aryanjasala/axle-leftovers/actions/workflows/plugin-check.yml"><img src="https://github.com/aryanjasala/axle-leftovers/actions/workflows/plugin-check.yml/badge.svg" alt="Plugin Check"></a>
 </p>
 
-<p align="center">Find the tables, options, cron events, meta, roles, uploads folders and theme settings, templates and styles that deleted plugins and themes left behind, see the evidence for each owner, and move them to a trash you can restore from.</p>
+<p align="center">Find the tables, options, cron events, meta, roles, uploads folders and theme settings, templates and styles, and the posts and terms of removed post types that deleted plugins and themes left behind, see the evidence for each owner, and move them to a trash you can restore from.</p>
 
 <p align="center">
   <img src=".github/media/demo.gif" alt="A plugin or theme is deleted, Leftovers lists what it left, everything goes to the trash, and the batch comes back with Restore" width="880">
@@ -24,7 +24,7 @@
 
 ---
 
-Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none, or skip tables, cron events, roles, uploads folders and meta. Themes leave their settings, options and, on block themes, the templates and styles you saved. Cleaners list these, but they guess the owner or charge for it, and every delete is permanent. Axle Leftovers records who creates what, reads the code of each plugin and theme once, ships the names used by about 500 popular plugins, and shows the evidence for every owner. Nothing is deleted on the first step: items are exported, moved to a trash, and restored exactly with one click.
+Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none, or skip tables, cron events, roles, uploads folders and meta. Themes leave their settings, options and, on block themes, the templates and styles you saved. A plugin that registered a post type leaves every post of it, with its meta and comments, in the database after it is gone. Cleaners list these, but they guess the owner or charge for it, and every delete is permanent. Axle Leftovers records who creates what, reads the code of each plugin and theme once, ships the names used by about 500 popular plugins, and shows the evidence for every owner. Nothing is deleted on the first step: items are exported, moved to a trash, and restored exactly with one click.
 
 > [!NOTE]
 > Free and open source under the GPL. No pro version, no upsells, no ads in wp-admin, no tracking. And it stays that way.
@@ -33,14 +33,15 @@ Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none,
 
 ## Features
 
-- **Ten item types**: tables, options and transients, cron events, post, user, term and comment meta keys, uploads folders, roles, capabilities on roles, and theme templates, global styles and custom CSS
+- **Twelve item types**: tables, options and transients, cron events, post, user, term and comment meta keys, uploads folders, roles, capabilities on roles, theme templates, global styles and custom CSS, and the posts and terms of post types and taxonomies nothing registers any more
 - **Themes too**: a deleted theme's Customizer settings, its options, transients, cron events and meta, and on block themes the templates, template parts, global styles and custom CSS you saved, listed under the theme's name with the same evidence, the same trash and the same restore. Widgets a theme switch left inactive are reported, never moved
+- **Posts and terms of removed post types**: the 4,000 `event` posts a deleted events plugin left in `wp_posts`, with their meta, comments, revisions and term links, and the terms of taxonomies nothing registers. Owners come from the same evidence as everything else. A type is only listed once no code has registered it for 7 days, on front end and wp-admin requests alike, and the screen shows counts per status and example titles so you can tell what it is
 - **Evidence, not guesses**: Certain (seen being created, around activation or at runtime), Likely (named in the plugin's code or the bundled dataset), Guess (name prefix), Unknown. Each item shows why
 - **Nothing in use is listed**: data of installed plugins (active or not), installed themes (even a broken one), must-use plugins and core never shows up
 - **Reference check**: a name that active code still uses blocks the trash and names the file
-- **Trash with undo**: SQL or JSON export first, then tables renamed, rows and folders moved. Restore a batch or one item exactly, with autoload values and cron schedules
-- **Typed confirmation** for Guess and Unknown items, on the screen, the CLI and the abilities
-- **Checked per item**: network items need the network capability, theme content needs `edit_theme_options` or `edit_css`, roles and user meta need the Users capabilities, on the screen, in REST, in abilities and in WP-CLI when a user is set
+- **Trash with undo**: SQL or JSON export first, then tables renamed, rows and folders moved. Restore a batch or one item exactly, with autoload values, cron schedules and, for posts and terms, the same IDs
+- **Typed confirmation** for Guess and Unknown items, and always for posts and terms, on the screen, the CLI, REST and the abilities
+- **Checked per item**: network items need the network capability, theme content needs `edit_theme_options` or `edit_css`, posts need `delete_others_posts`, terms need `manage_categories`, roles and user meta need the Users capabilities, on the screen, in REST, in abilities and in WP-CLI when a user is set
 - **Cost**: rows, size and autoloaded bytes per item and per plugin, so you see what a deleted plugin still adds to every page load
 - **Plugins screen notice** after a delete: "Leftover Maker left 1 table, 5 options and 2 cron events. Review."
 - **Plugins and Themes screen notice** after a delete: "Leftover Maker left 1 table, 5 options and 2 cron events. Review." and "Old Theme left 1 option and 14 template changes. Review."
@@ -70,6 +71,10 @@ wp axle-leftovers list --plugin=contact-form-7
 wp axle-leftovers trash --plugin=contact-form-7 --yes
 wp axle-leftovers list --theme=old-theme
 wp axle-leftovers trash --theme=old-theme --yes
+wp axle-leftovers observe
+wp axle-leftovers list --type=posttype
+wp axle-leftovers show posttype event
+wp axle-leftovers trash posttype event --yes
 wp axle-leftovers restore 20261030-101500-k3xq   # if it was wrong
 wp axle-leftovers trash purge --older-than=30 --yes
 ```
@@ -97,7 +102,7 @@ Or open Tools > Leftovers.
 
 | Doc | What it covers |
 | --- | --- |
-| [Reference](docs/REFERENCE.md) | Item types, attribution and evidence, themes, the lists and the online lookup, hooks, abilities, REST, WP-CLI, data and privacy |
+| [Reference](docs/REFERENCE.md) | Item types, attribution and evidence, themes, post types and taxonomies, the lists and the online lookup, hooks, abilities, REST, WP-CLI, data and privacy |
 | [Development](docs/DEVELOPMENT.md) | Local setup, commands and tests |
 | [Contributing](docs/CONTRIBUTING.md) | Pull requests, required checks and PR titles |
 | [Releasing](docs/RELEASING.md) | How merged pull requests become releases |
@@ -114,6 +119,8 @@ src/
 ├── Ledger.php            plugins seen and first-seen items
 ├── Signature.php         reads a plugin's or theme's PHP for the names it uses
 ├── Themes.php            installed themes, theme content and inactive widgets
+├── Content.php           posts and terms of unregistered post types and taxonomies
+├── Observer.php          which types register, on which kinds of request
 ├── Dataset.php           the bundled list merged with the downloaded one
 ├── DatasetUpdater.php    opt-in download of the full list
 ├── Lookup.php            opt-in online lookup of Unknown items
@@ -162,9 +169,9 @@ Small plugins that each fill one gap in WordPress, all free with no pro version.
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-runtime-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Runtime Doctor](https://github.com/aryanjasala/axle-runtime-doctor) | Check OPcache coverage, the object cache, PHP support and limits, cron and more, with the fix for your host |
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-smoke-test/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Smoke Test](https://github.com/aryanjasala/axle-smoke-test) | Check key pages after every update or deploy, see what broke and roll it back |
 | <img src="https://raw.githubusercontent.com/aryanjasala/block-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Doctor](https://github.com/aryanjasala/block-doctor) | Scan the site for broken blocks and fix them in bulk, with undo. See which posts use each block before you switch a plugin off |
-| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, see the diff, reset them or send them to Git |
+| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, see the diff, reset them, send them to Git, move them to another site or lock them |
 | <img src="https://raw.githubusercontent.com/aryanjasala/role-right-sizer/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Role Right-Sizer](https://github.com/aryanjasala/role-right-sizer) | Recommends the smallest role each user needs, from what they actually do |
-| <img src="https://raw.githubusercontent.com/aryanjasala/update-rehearsal/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Update Rehearsal](https://github.com/aryanjasala/update-rehearsal) | Try plugin, theme, core and PHP updates on a disposable copy of your site in WordPress Playground first |
+| <img src="https://raw.githubusercontent.com/aryanjasala/update-rehearsal/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Update Rehearsal](https://github.com/aryanjasala/update-rehearsal) | Try plugin, theme, core and PHP updates, a new plugin, or life without one, on a disposable copy of your site in WordPress Playground first |
 | <img src="https://raw.githubusercontent.com/aryanjasala/user-session-manager/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [User Session Manager](https://github.com/aryanjasala/user-session-manager) | See every device signed in, sign out one, and limit sessions per role |
 
 ## License
