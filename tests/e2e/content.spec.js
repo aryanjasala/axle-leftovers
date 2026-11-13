@@ -250,7 +250,7 @@ test.describe( 'Content of unregistered post types and taxonomies', () => {
 		await page.goto( `${ SCREEN }&tab=settings` );
 		await page.getByLabel( 'Watch post types for' ).fill( '14' );
 		await page.getByRole( 'button', { name: 'Save settings' } ).click();
-		await expect( page.locator( '.alo-notice, .notice' ).first() ).toContainText( 'Settings saved' );
+		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Settings saved' );
 		expect( JSON.parse( wp( 'axle-leftovers', 'settings', 'get', 'observe_days' ) ) ).toBe( 14 );
 		await context.close();
 	} );
