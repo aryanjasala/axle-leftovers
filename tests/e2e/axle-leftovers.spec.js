@@ -318,7 +318,8 @@ test.describe( 'Axle Leftovers', () => {
 		expect( wp( 'plugin', 'is-active', 'axle-leftovers' ) ).toBe( '' );
 
 		await page.locator( 'tr[data-plugin="axle-leftovers/axle-leftovers.php"] .deactivate a' ).click();
-		await dialog.getByRole( 'button', { name: 'Restore all' } ).click();
+		// The page is already on plugins.php, so wait for the form's own answer, not for the URL.
+		await Promise.all( [ page.waitForResponse( ( response ) => response.url().includes( 'admin-post.php' ) ), dialog.getByRole( 'button', { name: 'Restore all' } ).click() ] );
 		await page.waitForURL( /plugins\.php/ );
 		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" ) ).toEqual( [ [ 'restored' ] ] );
 		expect( wp( 'cron', 'event', 'list', '--fields=hook', '--format=csv' ) ).toContain( 'lm_cleanup' );
