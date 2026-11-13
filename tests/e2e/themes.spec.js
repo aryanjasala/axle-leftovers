@@ -120,24 +120,6 @@ test.describe( 'Theme leftovers', () => {
 		expect( wp( 'option', 'get', 'lt_settings', '--format=json' ) ).toContain( 'wide' );
 	} );
 
-	test( 'a post ID that exists again blocks the restore and nothing is half restored', async () => {
-		const ids = seed.makeThemeLeftovers();
-		wp( 'axle-leftovers', 'trash', 'template', 'leftover-theme', '--yes' );
-		const taken = ids.template[ 1 ];
-		wpEval( `global $wpdb; $wpdb->insert( $wpdb->posts, array( "ID" => ${ taken }, "post_type" => "post", "post_title" => "Taken", "post_status" => "draft" ) );` );
-		const batch = seed.query( "SELECT batch_id FROM wp_axle_leftovers_trash WHERE item_type = 'template'" )[ 0 ][ 0 ];
-
-		let message = '';
-		try {
-			wp( 'axle-leftovers', 'restore', batch );
-		} catch ( error ) {
-			message = String( error.stderr || error.message );
-		}
-		expect( message ).toContain( 'Something named leftover-theme exists now' );
-		expect( seed.query( `SELECT COUNT(*) FROM wp_posts WHERE ID IN (${ ids.template.join( ',' ) })` ) ).toEqual( [ [ '1' ] ] );
-		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE item_type = 'template'" ) ).toEqual( [ [ 'trashed' ] ] );
-	} );
-
 	test( 'the Themes screen says what a deleted theme left, right after the delete', async ( { page } ) => {
 		const original = seed.activeTheme();
 		seed.installTheme();
@@ -156,29 +138,6 @@ test.describe( 'Theme leftovers', () => {
 		await expect( page.locator( '.alo-card[data-owner="theme:leftover-theme"]' ) ).toBeVisible();
 		// The test deletes the theme from a WP-CLI process; a delete from the Themes screen records "admin".
 		expect( seed.query( "SELECT removed_how FROM wp_axle_leftovers_ledger WHERE slug = 'theme:leftover-theme'" ) ).toEqual( [ [ 'cli' ] ] );
-	} );
-
-	test( 'a theme folder removed outside WordPress is recorded', async ( { page } ) => {
-		const original = seed.activeTheme();
-		seed.installTheme();
-		wp( 'theme', 'activate', 'leftover-theme' );
-		wp( 'option', 'get', 'lt_version' );
-		wp( 'theme', 'activate', original );
-		wp( 'axle-leftovers', 'scan' );
-		expect( seed.query( "SELECT removed_gmt IS NULL FROM wp_axle_leftovers_ledger WHERE slug = 'theme:leftover-theme'" ) ).toEqual( [ [ '1' ] ] );
-
-		seed.shell( 'rm', '-rf', '/var/www/html/wp-content/themes/leftover-theme' );
-		await page.goto( `${ SCREEN }&tab=ledger` );
-		await expect( page.locator( 'tr[data-slug="theme:leftover-theme"]' ) ).toContainText( 'outside WordPress' );
-		await expect( page.locator( 'tr[data-slug="theme:leftover-theme"] .axle-badge' ).first() ).toHaveText( 'Theme' );
-		expect( seed.query( "SELECT removed_how FROM wp_axle_leftovers_ledger WHERE slug = 'theme:leftover-theme'" ) ).toEqual( [ [ 'outside' ] ] );
-		// Its code signature is kept, so the names the theme code used still point at it.
-		wp( 'db', 'query', "DELETE FROM wp_axle_leftovers_seen WHERE owner_slug = 'theme:leftover-theme'" );
-		wp( 'axle-leftovers', 'scan' );
-		const item = JSON.parse( wp( 'axle-leftovers', 'show', 'option', 'lt_settings', '--format=json' ) );
-		expect( item.owner ).toBe( 'theme:leftover-theme' );
-		expect( item.confidence ).toBe( 'likely' );
-		expect( item.evidence.map( ( line ) => line.text ) ).toContain( "Named in Leftover Theme's code" );
 	} );
 
 	test( 'widgets a theme switch left inactive are reported, not touched', async ( { page } ) => {

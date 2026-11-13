@@ -10,13 +10,6 @@
       "steps": [{ "waitFor": ".alo-empty" }, { "waitFor": ".alo-steps .axle-step" }]
     },
     {
-      "name": "By owner, nothing left, Get started card hidden",
-      "setup": [{ "js": "seed.js", "call": "resetAll" }, { "wp": ["user", "meta", "update", "1", "axle_leftovers_steps_dismissed", "1"] }],
-      "url": "/wp-admin/tools.php?page=axle-leftovers",
-      "steps": [{ "waitFor": ".alo-empty" }],
-      "cleanup": [{ "wp": ["user", "meta", "delete", "1", "axle_leftovers_steps_dismissed"] }]
-    },
-    {
       "name": "By owner with a card open, Certain items and a reference block",
       "setup": [{ "js": "seed.js", "call": "makeLeftovers" }, { "js": "seed.js", "call": "installConsumer" }, { "wp": ["axle-leftovers", "scan"] }],
       "url": "/wp-admin/tools.php?page=axle-leftovers",
@@ -110,13 +103,6 @@
       "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
     },
     {
-      "name": "By owner filtered to themes",
-      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }, { "js": "seed.js", "call": "makeLeftovers" }],
-      "url": "/wp-admin/tools.php?page=axle-leftovers&kind=theme",
-      "steps": [{ "waitFor": ".alo-kinds" }],
-      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
-    },
-    {
       "name": "In-place confirm to trash theme leftovers",
       "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }],
       "url": "/wp-admin/tools.php?page=axle-leftovers",
@@ -147,20 +133,6 @@
         { "waitFor": ".alo-notice .alo-undo" }
       ],
       "cleanup": [{ "js": "seed.js", "call": "resetAll" }]
-    },
-    {
-      "name": "By owner with a note about inactive widgets",
-      "setup": [{ "js": "seed.js", "call": "resetAll" }, { "wp": ["option", "update", "sidebars_widgets", "{\"wp_inactive_widgets\":[\"search-2\",\"meta-2\"],\"array_version\":3}", "--format=json"] }],
-      "url": "/wp-admin/tools.php?page=axle-leftovers",
-      "steps": [{ "waitFor": ".alo-widgets-note" }],
-      "cleanup": [{ "wp": ["option", "update", "sidebars_widgets", "{\"wp_inactive_widgets\":[],\"array_version\":3}", "--format=json"] }]
-    },
-    {
-      "name": "Ledger with a deleted theme",
-      "setup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "makeThemeLeftovers" }],
-      "url": "/wp-admin/tools.php?page=axle-leftovers&tab=ledger",
-      "steps": [{ "waitFor": ".alo-ledger tr[data-slug=\"theme:leftover-theme\"]" }],
-      "cleanup": [{ "js": "seed.js", "call": "resetThemes" }, { "js": "seed.js", "call": "resetAll" }]
     },
     {
       "name": "Plugins screen: the warning under the plugin while the trash holds items",

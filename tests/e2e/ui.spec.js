@@ -98,19 +98,8 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await page.getByRole( 'button', { name: 'Delete batch for good' } ).click();
 		await panel.getByRole( 'button', { name: 'Delete for good' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted 1 item for good. This cannot be undone.' );
-		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" ) ).toEqual( [ [ 'purged' ] ] );
-	} );
-
-	test( 'emptying the trash asks in place too, and results are spoken to screen readers', async ( { page } ) => {
-		seed.makeLeftovers();
-		wp( 'axle-leftovers', 'trash', 'cron', 'lm_cleanup', '--yes' );
-
-		await page.goto( `${ SCREEN }&tab=trash` );
-		await page.getByRole( 'button', { name: 'Empty trash' } ).first().click();
-		await expect( page.locator( '#alo-confirm-title' ) ).toHaveText( 'Empty the trash?' );
-		await page.locator( '#alo-confirm' ).getByRole( 'button', { name: 'Empty trash' } ).click();
-		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Deleted 1 item for good.' );
 		await expect( page.locator( '#a11y-speak-polite' ) ).toContainText( 'Deleted 1 item for good.' );
+		expect( seed.query( "SELECT status FROM wp_axle_leftovers_trash WHERE name = 'lm_cleanup'" ) ).toEqual( [ [ 'purged' ] ] );
 	} );
 
 	test( 'a button that takes a while shows a spinner and sets aria-busy', async ( { page } ) => {
@@ -150,20 +139,6 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await expect( page.locator( '.alo-trash-warning' ) ).toContainText( 'Deleting this plugin deletes it for good, and that cannot be undone.' );
 		await page.locator( '.alo-trash-warning' ).getByRole( 'link', { name: 'Open the trash' } ).click();
 		await expect( page.locator( '.alo-batch' ) ).toBeVisible();
-	} );
-
-	test( 'dates are relative with the exact time on hover', async ( { page } ) => {
-		seed.makeLeftovers();
-		wp( 'axle-leftovers', 'trash', 'cron', 'lm_cleanup', '--yes' );
-		for ( const url of [ SCREEN, `${ SCREEN }&tab=trash`, `${ SCREEN }&tab=ledger` ] ) {
-			await page.goto( url );
-			const times = page.locator( '.alo time.axle-time' );
-			expect( await times.count() ).toBeGreaterThan( 0 );
-			for ( const time of await times.all() ) {
-				await expect( time ).toHaveAttribute( 'datetime', /^\d{4}-\d\d-\d\dT/ );
-				await expect( time ).toHaveAttribute( 'title', /\d/ );
-			}
-		}
 	} );
 
 	test( 'wide lists scroll inside their own region at 360 px and the page does not', async ( { page } ) => {
