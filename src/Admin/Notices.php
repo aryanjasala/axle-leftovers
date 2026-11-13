@@ -175,8 +175,9 @@ final class Notices implements Service {
 		/* translators: %d: number of items. */
 		echo '<p>' . esc_html( sprintf( _n( 'The trash holds %d item. Deactivating keeps it, but uninstalling Leftovers deletes it for good, and that cannot be undone. Restore it first if you may need it.', 'The trash holds %d items. Deactivating keeps them, but uninstalling Leftovers deletes them for good, and that cannot be undone. Restore them first if you may need them.', $count, 'axle-leftovers' ), $count ) ) . '</p>';
 		echo '<p class="axle-actions">';
-		// The button points at a form outside the plugins table: a form cannot sit inside another form.
-		echo '<button type="submit" form="alo-deactivate-restore_all" class="button button-primary">' . esc_html__( 'Restore all', 'axle-leftovers' ) . '</button> ';
+		// The warning sits inside the plugins table's own form, and older WordPress releases (6.6) catch every
+		// submit button in that form. So this is a plain button and the script submits the separate form.
+		echo '<button type="button" class="button button-primary alo-deactivate-restore" data-form="alo-deactivate-restore_all">' . esc_html__( 'Restore all', 'axle-leftovers' ) . '</button> ';
 		echo '<a class="button alo-deactivate-anyway" href="#">' . esc_html__( 'Deactivate anyway', 'axle-leftovers' ) . '</a> ';
 		echo '<button type="button" class="button-link alo-confirm-cancel">' . esc_html__( 'Cancel', 'axle-leftovers' ) . '</button>';
 		echo '</p></div>';

@@ -303,6 +303,13 @@
 			panel.querySelector( '#alo-deactivate-title' ).focus();
 		} );
 		panel.querySelector( '.alo-confirm-cancel' ).addEventListener( 'click', close );
+		panel.querySelector( '.alo-deactivate-restore' ).addEventListener( 'click', ( event ) => {
+			const form = document.getElementById( event.currentTarget.getAttribute( 'data-form' ) );
+			if ( form ) {
+				event.currentTarget.disabled = true;
+				form.submit();
+			}
+		} );
 		panel.addEventListener( 'keydown', ( event ) => {
 			if ( 'Escape' === event.key ) {
 				event.preventDefault();
