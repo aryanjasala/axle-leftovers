@@ -132,34 +132,25 @@ function query( sql ) {
 		.map( ( line ) => line.split( '\t' ) );
 }
 
-/** Puts the site back: no fixture plugin, no leftovers, empty trash and ledger. */
+/**
+ * Puts the site back: no fixture plugin, no leftovers, empty trash and ledger.
+ *
+ * Every WP-CLI call starts a container command, so this does its work in one PHP run.
+ */
 function resetAll() {
 	succeeds( 'plugin', 'deactivate', 'leftover-maker' );
 	removeMakerOutside();
-	removeConsumer();
-	for ( const table of [ ...tables( 'wp\\_lm\\_%' ), ...tables( 'wp\\_axlt\\_%' ), ...tables( 'wp\\_mystery\\_%' ), ...tables( 'wp\\_redirection\\_%' ) ] ) {
-		wp( 'db', 'query', `DROP TABLE IF EXISTS ${ table }` );
-	}
-	for ( const option of [ ...MAKER_OPTIONS, 'redirection_options' ] ) {
-		succeeds( 'option', 'delete', option );
-	}
+	const options = [ ...MAKER_OPTIONS, 'redirection_options', 'axle_leftovers_scan', 'axle_leftovers_settings', 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ];
 	wpEval(
-		'foreach ( array( "lm_daily_sync", "lm_cleanup" ) as $h ) { wp_unschedule_hook( $h ); } remove_role( "lm_manager" ); foreach ( wp_roles()->role_objects as $r ) { $r->remove_cap( "lm_manage" ); } delete_post_meta_by_key( "_lm_flag" );' +
-			'$base = wp_upload_dir()["basedir"]; foreach ( array( "leftover-maker", "axle-leftovers" ) as $d ) { if ( is_dir( "$base/$d" ) ) { $it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$base/$d", FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST ); foreach ( $it as $f ) { $f->isDir() ? rmdir( $f->getPathname() ) : unlink( $f->getPathname() ); } rmdir( "$base/$d" ); } }'
+		'global $wpdb; @unlink( WPMU_PLUGIN_DIR . "/lm-consumer.php" ); @unlink( WPMU_PLUGIN_DIR . "/axle-leftovers-mock-http.php" );' +
+			'foreach ( $wpdb->get_col( "SHOW TABLES" ) as $t ) { if ( preg_match( "/^wp_(lm|axlt|mystery|redirection)_/", $t ) ) { $wpdb->query( "DROP TABLE IF EXISTS `$t`" ); } }' +
+			`foreach ( json_decode( '${ JSON.stringify( options ) }' ) as $o ) { delete_option( $o ); }` +
+			'foreach ( array( "lm_daily_sync", "lm_cleanup" ) as $h ) { wp_unschedule_hook( $h ); } remove_role( "lm_manager" ); foreach ( wp_roles()->role_objects as $r ) { $r->remove_cap( "lm_manage" ); } delete_post_meta_by_key( "_lm_flag" );' +
+			'$base = wp_upload_dir()["basedir"]; foreach ( array( "leftover-maker", "axle-leftovers" ) as $d ) { if ( is_dir( "$base/$d" ) ) { $it = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( "$base/$d", FilesystemIterator::SKIP_DOTS ), RecursiveIteratorIterator::CHILD_FIRST ); foreach ( $it as $f ) { $f->isDir() ? rmdir( $f->getPathname() ) : unlink( $f->getPathname() ); } rmdir( "$base/$d" ); } }' +
+			'foreach ( array( "wp_axle_leftovers_trash", "wp_axle_leftovers_seen", "wp_axle_leftovers_ledger" ) as $t ) { $wpdb->query( "TRUNCATE TABLE `$t`" ); }' +
+			'foreach ( array( "_transient_axle_leftovers_", "_transient_timeout_axle_leftovers_" ) as $p ) { $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $p ) . "%" ) ); }' +
+			'wp_clear_scheduled_hook( "axle_leftovers_scan_step" );'
 	);
-	for ( const table of [ 'wp_axle_leftovers_trash', 'wp_axle_leftovers_seen', 'wp_axle_leftovers_ledger' ] ) {
-		wp( 'db', 'query', `TRUNCATE TABLE ${ table }` );
-	}
-	for ( const option of [ 'axle_leftovers_scan', 'axle_leftovers_settings' ] ) {
-		succeeds( 'option', 'delete', option );
-	}
-	wp( 'db', 'query', "DELETE FROM wp_options WHERE option_name LIKE '\\_transient\\_axle\\_leftovers\\_%' OR option_name LIKE '\\_transient\\_timeout\\_axle\\_leftovers\\_%'" );
-	succeeds( 'cron', 'event', 'unschedule', 'axle_leftovers_scan_step' );
-
-	removeMockHttp();
-	for ( const option of [ 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ] ) {
-		succeeds( 'option', 'delete', option );
-	}
 }
 
 /** Leftovers of Redirection, deleted before Leftovers was installed: known only from the dataset. */
