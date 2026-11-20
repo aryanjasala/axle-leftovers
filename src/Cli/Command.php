@@ -12,7 +12,9 @@ use AryanX\Axle\Leftovers\DatasetUpdater;
 use AryanX\Axle\Leftovers\Dataset;
 use AryanX\Axle\Leftovers\Ledger;
 use AryanX\Axle\Leftovers\Lookup;
+use AryanX\Axle\Leftovers\Inventory;
 use AryanX\Axle\Leftovers\Observer;
+use AryanX\Axle\Leftovers\Reinstall;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Settings;
 use AryanX\Axle\Leftovers\Signature;
@@ -56,18 +58,27 @@ final class Command {
 	private DatasetUpdater $updater;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall
+	 */
+	private Reinstall $reinstall;
+
+	/**
 	 * Sets up the command.
 	 *
-	 * @param Scanner             $scanner Scanner.
-	 * @param Trash               $trash   Trash.
-	 * @param Ledger              $ledger  Ledger.
-	 * @param DatasetUpdater|null $updater Downloaded list. Default: the stored one.
+	 * @param Scanner             $scanner   Scanner.
+	 * @param Trash               $trash     Trash.
+	 * @param Ledger              $ledger    Ledger.
+	 * @param DatasetUpdater|null $updater   Downloaded list. Default: the stored one.
+	 * @param Reinstall|null      $reinstall Reinstall restore. Default: a new one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash, Ledger $ledger, ?DatasetUpdater $updater = null ) {
-		$this->scanner = $scanner;
-		$this->trash   = $trash;
-		$this->ledger  = $ledger;
-		$this->updater = $updater ?? new DatasetUpdater();
+	public function __construct( Scanner $scanner, Trash $trash, Ledger $ledger, ?DatasetUpdater $updater = null, ?Reinstall $reinstall = null ) {
+		$this->scanner   = $scanner;
+		$this->trash     = $trash;
+		$this->ledger    = $ledger;
+		$this->updater   = $updater ?? new DatasetUpdater();
+		$this->reinstall = $reinstall ?? new Reinstall( $trash, new Inventory() );
 	}
 
 	/**
@@ -443,6 +454,110 @@ final class Command {
 	}
 
 	/**
+	 * Brings back the data of a plugin that was installed again.
+	 *
+	 * When a plugin comes back and the trash holds the tables and options it left, restoring them has
+	 * to happen before it is activated, because activation creates empty tables under the same names.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <action>
+	 * : list (installed plugins with data in the trash), preview <plugin>, restore <plugin>, skip <plugin> (start fresh and stop asking at activation) or undo <id>.
+	 *
+	 * [<target>]
+	 * : The plugin slug, or with undo the ID the restore printed.
+	 *
+	 * [--use-old=<names>]
+	 * : With restore: comma-separated names of tables or options that clash with what the plugin wrote since. Their current data goes to the trash, then the old data comes back. Without it, clashes are left alone.
+	 *
+	 * [--format=<format>]
+	 * : With list and preview: table, csv, json or yaml.
+	 * ---
+	 * default: table
+	 * ---
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp axle-leftovers reinstall list
+	 *     wp axle-leftovers reinstall preview acme
+	 *     wp axle-leftovers reinstall restore acme
+	 *     wp axle-leftovers reinstall restore acme --use-old=acme_settings
+	 *     wp axle-leftovers reinstall undo r261120101500abcd
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Options.
+	 */
+	public function reinstall( $args, $assoc_args ): void {
+		$action = (string) ( $args[0] ?? '' );
+		$target = (string) ( $args[1] ?? '' );
+		$format = (string) ( $assoc_args['format'] ?? 'table' );
+
+		switch ( $action ) {
+			case 'list':
+				$rows = array();
+				foreach ( $this->reinstall->pending() as $entry ) {
+					$rows[] = array(
+						'plugin'   => $entry['slug'],
+						'name'     => $entry['name'],
+						'active'   => $entry['active'] ? 'yes' : 'no',
+						'items'    => $entry['rows'],
+						'decision' => $entry['decision'],
+					);
+				}
+				Utils\format_items( $format, $rows, array( 'plugin', 'name', 'active', 'items', 'decision' ) );
+				return;
+
+			case 'preview':
+				$plan = $this->reinstall->plan( $target );
+				if ( ! $plan ) {
+					WP_CLI::error( 'The trash holds nothing of that plugin.' );
+					return;
+				}
+				Utils\format_items( $format, $plan, array( 'id', 'type', 'name', 'state', 'default', 'old', 'live' ) );
+				return;
+
+			case 'skip':
+				$this->reinstall->set_decision( $target, 'skipped' );
+				WP_CLI::success( 'Activation will not stop for this plugin. Its old data stays in the trash.' );
+				return;
+
+			case 'restore':
+				$plan   = $this->reinstall->plan( $target );
+				$picked = $this->reinstall->defaults( $plan );
+				$old    = array_filter( array_map( 'trim', explode( ',', (string) ( $assoc_args['use-old'] ?? '' ) ) ) );
+				foreach ( $plan as $entry ) {
+					if ( 'conflict' === $entry['state'] && in_array( $entry['name'], $old, true ) ) {
+						$picked[ $entry['id'] ] = 'use_old';
+					}
+				}
+				$result = $this->reinstall->restore( $target, $picked, 'cli' );
+				if ( is_wp_error( $result ) ) {
+					WP_CLI::error( $result->get_error_message() );
+					return;
+				}
+				foreach ( $result['failed'] as $failed ) {
+					WP_CLI::warning( $failed['message'] );
+				}
+				WP_CLI::success( sprintf( 'Restored %d items. Undo: wp axle-leftovers reinstall undo %s', count( $result['entry']['restored'] ), $result['entry']['id'] ) );
+				return;
+
+			case 'undo':
+				$result = $this->reinstall->undo( $target );
+				if ( is_wp_error( $result ) ) {
+					WP_CLI::error( $result->get_error_message() );
+					return;
+				}
+				foreach ( $result['failed'] as $failed ) {
+					WP_CLI::warning( $failed['message'] );
+				}
+				WP_CLI::success( 'Undone. What was restored is in the trash again.' );
+				return;
+		}
+
+		WP_CLI::error( 'Use list, preview <plugin>, restore <plugin>, skip <plugin> or undo <id>.' );
+	}
+
+	/**
 	 * Shows the plugins Leftovers has seen.
 	 *
 	 * ## OPTIONS
@@ -580,7 +695,7 @@ final class Command {
 	 * : list, get or set. Default: list.
 	 *
 	 * [<key>]
-	 * : With get or set: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset or observe_days.
+	 * : With get or set: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset, reinstall_offer or observe_days.
 	 *
 	 * [<value>]
 	 * : With set: a number, or true or false for the switches. Turning on online_lookup or remote_dataset allows the external services described in the readme.

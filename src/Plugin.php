@@ -56,6 +56,13 @@ final class Plugin {
 	private Trash $trash;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall
+	 */
+	private Reinstall $reinstall;
+
+	/**
 	 * Starts the plugin. Runs on `plugins_loaded`.
 	 */
 	public static function boot(): void {
@@ -78,11 +85,12 @@ final class Plugin {
 	 * Builds the shared objects.
 	 */
 	private function __construct() {
-		$inventory      = new Inventory();
-		$this->ledger   = new Ledger();
-		$this->recorder = new Recorder( $this->ledger, $inventory );
-		$this->scanner  = new Scanner( $this->ledger, $inventory, new Attribution( $this->ledger, new Dataset() ), new References(), $this->recorder );
-		$this->trash    = new Trash( $this->scanner, $inventory, new Storage() );
+		$inventory       = new Inventory();
+		$this->ledger    = new Ledger();
+		$this->recorder  = new Recorder( $this->ledger, $inventory );
+		$this->scanner   = new Scanner( $this->ledger, $inventory, new Attribution( $this->ledger, new Dataset() ), new References(), $this->recorder );
+		$this->trash     = new Trash( $this->scanner, $inventory, new Storage() );
+		$this->reinstall = new Reinstall( $this->trash, $inventory );
 	}
 
 	/**
@@ -122,20 +130,30 @@ final class Plugin {
 	}
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @return Reinstall
+	 */
+	public function reinstall(): Reinstall {
+		return $this->reinstall;
+	}
+
+	/**
 	 * Registers the services.
 	 */
 	private function register(): void {
 		Schema::maybe_upgrade();
 
 		$services = array(
+			$this->reinstall,
 			$this->recorder,
 			new Observer(),
 			new Cron( $this->scanner, $this->trash ),
-			new Page( $this->scanner, $this->trash, $this->ledger, $this->recorder ),
-			new Notices( $this->scanner, $this->trash ),
-			new Controller( $this->scanner, $this->trash ),
-			new Abilities( $this->scanner, $this->trash ),
-			new SiteHealth( $this->scanner ),
+			new Page( $this->scanner, $this->trash, $this->ledger, $this->recorder, $this->reinstall ),
+			new Notices( $this->scanner, $this->trash, $this->reinstall ),
+			new Controller( $this->scanner, $this->trash, $this->reinstall ),
+			new Abilities( $this->scanner, $this->trash, null, $this->reinstall ),
+			new SiteHealth( $this->scanner, $this->reinstall ),
 			new Privacy( $this->trash ),
 		);
 
@@ -144,7 +162,7 @@ final class Plugin {
 		}
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
-			\WP_CLI::add_command( 'axle-leftovers', new Command( $this->scanner, $this->trash, $this->ledger ) );
+			\WP_CLI::add_command( 'axle-leftovers', new Command( $this->scanner, $this->trash, $this->ledger, null, $this->reinstall ) );
 		}
 	}
 }

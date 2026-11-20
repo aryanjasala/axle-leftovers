@@ -43,6 +43,7 @@ test.describe( 'Screenshots', () => {
 		await page.locator( 'tr[data-item="table:wp_mystery_log"] input[type="checkbox"]' ).check();
 		await page.getByRole( 'button', { name: 'Move selected to trash' } ).click();
 		await page.getByLabel( 'Type wp_mystery_log' ).fill( 'wp_mystery_log' );
+		await page.locator( '#alo-unknown-card' ).scrollIntoViewIfNeeded();
 		await shot( page, 2 );
 		await page.keyboard.press( 'Escape' );
 	} );
@@ -75,5 +76,12 @@ test.describe( 'Screenshots', () => {
 		await expect( card.locator( '.alo-items' ) ).toBeVisible();
 		await card.scrollIntoViewIfNeeded();
 		await shot( page, 6, { fullPage: true } );
+	} );
+
+	test( '7: a plugin comes back, and its data is offered first', async () => {
+		seed.makeReinstallClash();
+		await page.goto( `${ SCREEN }&reinstall=leftover-maker` );
+		await expect( page.locator( '.alo-reinstall-items tr[data-state="conflict"]' ).first() ).toBeVisible();
+		await shot( page, 7, { fullPage: true } );
 	} );
 } );

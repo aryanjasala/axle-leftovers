@@ -38,6 +38,7 @@ Data of an installed plugin or theme, active or not, is never listed. Core table
 * **Export first**: tables as SQL, everything else as JSON, in a protected folder you download from wp-admin.
 * **Trash, not delete**: tables are renamed, rows and folders are moved, so a restore is exact. Cron events come back with their schedule, options with their autoload value.
 * **One batch, one undo**: restore a whole batch or a single item from the Trash tab.
+* **A reinstalled plugin gets its data back**: install a deleted plugin again and Leftovers stops the activation at a preview of what the trash holds, and restores it before the plugin creates empty tables under the same names. If the plugin already wrote its own, you see both and choose per item. Every restore has Undo.
 * **Reference check**: before anything moves, Leftovers searches active plugins, the theme, must-use plugins and drop-ins for the name. A hit blocks the trash and names the file.
 * Roles that users still have are never removed. The users are listed instead.
 * With Axle Read-Only Mode freezing the site, trash, restore and purge are refused.
@@ -63,6 +64,7 @@ On multisite, each site lists its own leftovers. Network options, user meta and 
 * `wp axle-leftovers restore <batch-id|item-id>`
 * `wp axle-leftovers trash list` and `wp axle-leftovers trash purge [--older-than=<days>] [--yes]`
 * `wp axle-leftovers ledger list` and `wp axle-leftovers ledger show <slug>`
+* `wp axle-leftovers reinstall list|preview <plugin>|restore <plugin>|skip <plugin>|undo <id>`
 * `wp axle-leftovers observe [<type> <name>]`
 * `wp axle-leftovers settings [list|get <key>|set <key> <value>]`
 
@@ -100,6 +102,10 @@ Post types register on `init`, and some register only in wp-admin, in REST or on
 
 Everything is exported to a file first, then moved in batches, and the trash keeps it for 30 days. Restore puts the posts, meta, comments and term links back with the same IDs, and refuses when an ID has been taken since. Attachments (media) are not moved. A web request moves at most 100,000 rows in one item; WP-CLI has no limit.
 
+= I installed a plugin again after cleaning up. Is its data gone? =
+
+No, if its leftovers are in the trash. When you activate it, Leftovers stops at a preview of the tables and options the trash holds and restores what you pick before the plugin runs. Without that, activation would create empty tables with the same names and a restore would be refused. If the plugin already started from scratch, By owner and the Plugins screen offer the same preview with both versions of each table and option side by side. Nothing the plugin wrote is replaced unless you choose the old data for that item, and then the current data goes to the trash first. Every restore has an Undo. In WP-CLI, activation stops with the commands to run (`wp axle-leftovers reinstall restore <plugin>`). Turn it off in Settings if you never want it.
+
 = Does it send anything anywhere? =
 
 Not unless you turn on one of two opt-in features in Settings, both off by default. The online lookup sends the name of one Unknown item to veloria.dev when you click Look it up. The full list download fetches a file from raw.githubusercontent.com and sends nothing from your site. See External services below.
@@ -119,11 +125,12 @@ It has `.htaccess` and `web.config` deny rules, which nginx ignores. The file na
 == Screenshots ==
 
 1. By owner: what a deleted plugin or theme left, with the evidence, sizes, the autoload cost and the reference check.
-2. Moving an Unknown table to the trash needs its name typed.
+2. Unknown owner is the last card of By owner. Moving an Unknown table to the trash needs its name typed.
 3. The trash: one batch, each item's export, and Restore.
 4. The ledger: every plugin seen, how it was removed, and the names its code uses.
 5. The notice on the Plugins screen after a delete.
 6. A deleted theme: its settings, options, templates and styles, listed under its name.
+7. A plugin comes back: the trash holds its old data, and each table and option can be restored, kept as the plugin wrote it, or swapped, with Undo.
 
 == External services ==
 

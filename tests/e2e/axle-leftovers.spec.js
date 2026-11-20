@@ -77,10 +77,12 @@ test.describe( 'Axle Leftovers', () => {
 		await card.getByText( 'Review and move to trash' ).click();
 		await expect( card.locator( 'tbody tr' ) ).toHaveCount( MAKER_ITEMS.length );
 		for ( const id of MAKER_ITEMS ) {
-			await expect( card.locator( `tr[data-item="${ id }"] .alo-badge` ) ).toHaveText( 'Certain' );
+			await expect( card.locator( `tr[data-item="${ id }"]` ) ).toHaveCount( 1 );
 		}
+		// The confidence and the shared evidence show once, on the card, not on every row.
+		await expect( card.locator( 'tbody .alo-badge' ) ).toHaveCount( 0 );
 		await expect( card.locator( 'tr[data-item="option:lm_version"]' ) ).toHaveCount( 0 );
-		await expect( card.locator( 'tr[data-item="table:wp_lm_items"]' ) ).toContainText( 'Created when Leftover Maker was activated' );
+		await expect( card.locator( '.alo-evidence--card' ) ).toContainText( 'Created when Leftover Maker was activated' );
 		await expect( card.locator( 'tr[data-item="option:lm_cache"]' ) ).toContainText( 'Autoloaded' );
 	} );
 
@@ -356,7 +358,7 @@ test.describe( 'Axle Leftovers', () => {
 		await page.getByLabel( 'Keep export files when the trash is purged' ).check();
 		await page.getByRole( 'button', { name: 'Save settings' } ).click();
 		await expect( page.locator( '.alo-notice' ) ).toContainText( 'Settings saved.' );
-		expect( JSON.parse( wp( 'option', 'get', 'axle_leftovers_settings', '--format=json' ) ) ).toEqual( { retention_days: 7, export_max_mb: 50, keep_exports: true, runtime_ledger: true, track_meta_keys: false, online_lookup: false, remote_dataset: false, observe_days: 7 } );
+		expect( JSON.parse( wp( 'option', 'get', 'axle_leftovers_settings', '--format=json' ) ) ).toEqual( { retention_days: 7, export_max_mb: 50, keep_exports: true, runtime_ledger: true, track_meta_keys: false, online_lookup: false, remote_dataset: false, observe_days: 7, reinstall_offer: true } );
 		await expect( page.getByLabel( 'Keep trashed items for' ) ).toHaveValue( '7' );
 	} );
 

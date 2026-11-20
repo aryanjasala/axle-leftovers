@@ -159,6 +159,30 @@ final class Privacy implements Service {
 			}
 		}
 
+		if ( $user ) {
+			foreach ( Reinstall::entries_for_user( (int) $user->ID ) as $entry ) {
+				$data[] = array(
+					'group_id'    => 'axle-leftovers-reinstall',
+					'group_label' => __( 'Leftovers reinstall restores', 'axle-leftovers' ),
+					'item_id'     => 'axle-leftovers-reinstall-' . $entry['id'],
+					'data'        => array(
+						array(
+							'name'  => __( 'Plugin', 'axle-leftovers' ),
+							'value' => (string) $entry['slug'],
+						),
+						array(
+							'name'  => __( 'Restored (UTC)', 'axle-leftovers' ),
+							'value' => (string) $entry['gmt'],
+						),
+						array(
+							'name'  => __( 'Items', 'axle-leftovers' ),
+							'value' => (string) count( (array) $entry['restored'] ),
+						),
+					),
+				);
+			}
+		}
+
 		return array(
 			'data' => $data,
 			'done' => true,
@@ -209,7 +233,7 @@ final class Privacy implements Service {
 		$anonymized = 0;
 		if ( $id > 0 ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- The plugin's own table.
-			$anonymized = (int) $wpdb->update( Schema::table( 'trash' ), array( 'trashed_by' => 0 ), array( 'trashed_by' => $id ) );
+			$anonymized = (int) $wpdb->update( Schema::table( 'trash' ), array( 'trashed_by' => 0 ), array( 'trashed_by' => $id ) ) + Reinstall::anonymize_user( $id );
 		}
 
 		$messages = array();

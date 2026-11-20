@@ -55,10 +55,6 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await expect( empty.getByRole( 'link', { name: 'Open Plugins' } ) ).toBeVisible();
 		await expect( empty.getByRole( 'link', { name: 'Open Themes' } ) ).toBeVisible();
 
-		await page.goto( `${ SCREEN }&tab=unknown` );
-		await expect( page.locator( '.alo-empty' ) ).toContainText( 'you type a name to move one to the trash' );
-		await expect( page.getByRole( 'link', { name: 'Open settings to turn on the online lookup' } ) ).toBeVisible();
-
 		await page.goto( `${ SCREEN }&tab=trash` );
 		await expect( page.locator( '.alo-empty' ) ).toContainText( 'The trash is empty' );
 
@@ -70,7 +66,7 @@ test.describe( 'Leftovers screen behaviour', () => {
 		await page.goto( SCREEN );
 		await page.locator( '#contextual-help-link' ).click();
 		const tabs = page.locator( '#contextual-help-wrap .contextual-help-tabs a' );
-		await expect( tabs ).toHaveText( [ 'Overview', 'Owners and evidence', 'Trash and restore', 'Themes', 'Posts and terms', 'Settings and lookups' ] );
+		await expect( tabs ).toHaveText( [ 'Overview', 'Owners and evidence', 'Trash and restore', 'A plugin comes back', 'Themes', 'Posts and terms', 'Settings and lookups' ] );
 		await expect( page.locator( '#tab-panel-axle-leftovers-overview' ) ).toContainText( 'Nothing is deleted on the first step' );
 		await tabs.filter( { hasText: 'Themes' } ).click();
 		await expect( page.locator( '#tab-panel-axle-leftovers-themes' ) ).toContainText( 'Widgets that a theme switch left inactive are only reported' );

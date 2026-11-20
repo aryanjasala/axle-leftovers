@@ -26,12 +26,13 @@ final class Settings {
 		'online_lookup'   => false,
 		'remote_dataset'  => false,
 		'observe_days'    => 7,
+		'reinstall_offer' => true,
 	);
 
 	/**
 	 * The stored settings merged over the defaults.
 	 *
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int, reinstall_offer: bool}
 	 */
 	public static function all(): array {
 		$stored = get_option( self::OPTION, array() );
@@ -44,7 +45,7 @@ final class Settings {
 	 * Cleans submitted or stored settings.
 	 *
 	 * @param array $input Raw values.
-	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int}
+	 * @return array{retention_days: int, export_max_mb: int, keep_exports: bool, runtime_ledger: bool, track_meta_keys: bool, online_lookup: bool, remote_dataset: bool, observe_days: int, reinstall_offer: bool}
 	 */
 	public static function sanitize( array $input ): array {
 		return array(
@@ -56,6 +57,7 @@ final class Settings {
 			'online_lookup'   => ! empty( $input['online_lookup'] ),
 			'remote_dataset'  => ! empty( $input['remote_dataset'] ),
 			'observe_days'    => max( 1, min( 365, (int) ( $input['observe_days'] ?? self::DEFAULTS['observe_days'] ) ) ),
+			'reinstall_offer' => ! empty( $input['reinstall_offer'] ),
 		);
 	}
 
@@ -72,7 +74,7 @@ final class Settings {
 		/**
 		 * Fires after the settings are saved, from the screen, WP-CLI or an ability.
 		 *
-		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset, observe_days.
+		 * @param array $new The settings now: retention_days, export_max_mb, keep_exports, runtime_ledger, track_meta_keys, online_lookup, remote_dataset, observe_days, reinstall_offer.
 		 * @param array $old The settings before.
 		 */
 		do_action( 'axle_leftovers_settings_saved', $new, $old );
@@ -383,6 +385,29 @@ final class Settings {
 		$required = (bool) apply_filters( 'axle_leftovers_require_typed_confirmation', $default, $confidence );
 
 		return $default || $required;
+	}
+
+	/**
+	 * What happens when a plugin whose items are in the trash is activated again.
+	 *
+	 * @param string $slug Plugin slug.
+	 * @return string ask, restore or off.
+	 */
+	public static function reinstall_mode( string $slug = '' ): string {
+		$default = self::all()['reinstall_offer'] ? 'ask' : 'off';
+
+		/**
+		 * Filters what Leftovers does when a plugin comes back and its data is in the trash:
+		 * `ask` stops the activation on the screen to preview and choose (and stops WP-CLI with the
+		 * commands to run), `restore` brings back what does not clash with anything, with no question, and
+		 * `off` does nothing. Items that clash are never replaced without a choice.
+		 *
+		 * @param string $mode ask, restore or off. Default `ask`, or `off` when the setting is off.
+		 * @param string $slug Plugin slug.
+		 */
+		$mode = apply_filters( 'axle_leftovers_reinstall_mode', $default, $slug );
+
+		return in_array( $mode, array( 'ask', 'restore', 'off' ), true ) ? (string) $mode : $default;
 	}
 
 	/**

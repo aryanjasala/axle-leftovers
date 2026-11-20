@@ -23,69 +23,77 @@ final class Messages {
 	public static function all(): array {
 		$messages = array(
 			/* translators: %s: item name. */
-			'protected'          => __( '%s belongs to WordPress or is protected, so it is never trashed.', 'axle-leftovers' ),
+			'protected'           => __( '%s belongs to WordPress or is protected, so it is never trashed.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'not_listed'         => __( '%s is not in the scan results. Scan again and pick it from the list.', 'axle-leftovers' ),
+			'not_listed'          => __( '%s is not in the scan results. Scan again and pick it from the list.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'missing'            => __( '%s does not exist any more.', 'axle-leftovers' ),
+			'missing'             => __( '%s does not exist any more.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: plugin or theme name. */
-			'in_use'             => __( '%1$s is in use: %2$s is installed.', 'axle-leftovers' ),
+			'in_use'              => __( '%1$s is in use: %2$s is installed.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'network'            => __( '%s belongs to the whole network. Only network admins can trash it.', 'axle-leftovers' ),
+			'network'             => __( '%s belongs to the whole network. Only network admins can trash it.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'item_cap'           => __( 'You are not allowed to change %s.', 'axle-leftovers' ),
+			'item_cap'            => __( 'You are not allowed to change %s.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'confirm'            => __( 'Type the name %s to confirm. The owner is not certain.', 'axle-leftovers' ),
+			'confirm'             => __( 'Type the name %s to confirm. The owner is not certain.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'confirm_content'    => __( 'Type the name %s to confirm. This moves posts or terms, not only settings.', 'axle-leftovers' ),
+			'confirm_content'     => __( 'Type the name %s to confirm. This moves posts or terms, not only settings.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'registered'         => __( '%s is registered by active code now, so it is not unregistered. Scan again.', 'axle-leftovers' ),
+			'registered'          => __( '%s is registered by active code now, so it is not unregistered. Scan again.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: number of days. */
-			'watching'           => __( '%1$s has not been watched for %2$s days yet. It may be registered only on some requests.', 'axle-leftovers' ),
+			'watching'            => __( '%1$s has not been watched for %2$s days yet. It may be registered only on some requests.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: number of rows, 3: limit. */
-			'too_big'            => __( '%1$s holds %2$s rows, more than the limit of %3$s for one web request. Use WP-CLI to move it: wp axle-leftovers trash.', 'axle-leftovers' ),
+			'too_big'             => __( '%1$s holds %2$s rows, more than the limit of %3$s for one web request. Use WP-CLI to move it: wp axle-leftovers trash.', 'axle-leftovers' ),
 			/* translators: 1: role, 2: user logins. */
-			'role_users'         => __( 'Users still have the role %1$s: %2$s. Change their role first.', 'axle-leftovers' ),
+			'role_users'          => __( 'Users still have the role %1$s: %2$s. Change their role first.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: file paths. */
-			'referenced'         => __( '%1$s is still used by active code: %2$s.', 'axle-leftovers' ),
+			'referenced'          => __( '%1$s is still used by active code: %2$s.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'filtered'           => __( 'A filter on this site does not allow trashing %s.', 'axle-leftovers' ),
+			'filtered'            => __( 'A filter on this site does not allow trashing %s.', 'axle-leftovers' ),
 			/* translators: %s: item type. */
-			'bad_type'           => __( 'Unknown item type: %s.', 'axle-leftovers' ),
+			'bad_type'            => __( 'Unknown item type: %s.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'failed'             => __( 'Could not move %s to the trash. Nothing in this batch was changed.', 'axle-leftovers' ),
+			'failed'              => __( 'Could not move %s to the trash. Nothing in this batch was changed.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'export_failed'      => __( 'Could not write the export of %s, so it was not trashed. Check that the uploads folder is writable.', 'axle-leftovers' ),
+			'export_failed'       => __( 'Could not write the export of %s, so it was not trashed. Check that the uploads folder is writable.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'taken'              => __( 'Something named %s exists now. Rename or remove it, then restore again.', 'axle-leftovers' ),
+			'taken'               => __( 'Something named %s exists now. Rename or remove it, then restore again.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'gone'               => __( 'The trashed copy of %s is missing, so it cannot be restored.', 'axle-leftovers' ),
+			'gone'                => __( 'The trashed copy of %s is missing, so it cannot be restored.', 'axle-leftovers' ),
 			/* translators: %s: folder name. */
-			'unsafe'             => __( 'The folder %s is a link or outside uploads, so it is left alone.', 'axle-leftovers' ),
-			'frozen'             => __( 'Axle Read-Only Mode has frozen this site. Trash, restore and purge are off until the freeze ends.', 'axle-leftovers' ),
-			'nothing_selected'   => __( 'Pick at least one item.', 'axle-leftovers' ),
-			'lookup_off'         => __( 'The online lookup is off. Turn it on in Settings first.', 'axle-leftovers' ),
+			'unsafe'              => __( 'The folder %s is a link or outside uploads, so it is left alone.', 'axle-leftovers' ),
+			'frozen'              => __( 'Axle Read-Only Mode has frozen this site. Trash, restore and purge are off until the freeze ends.', 'axle-leftovers' ),
+			'nothing_selected'    => __( 'Pick at least one item.', 'axle-leftovers' ),
+			'lookup_off'          => __( 'The online lookup is off. Turn it on in Settings first.', 'axle-leftovers' ),
 			/* translators: %s: item name. */
-			'lookup_owned'       => __( '%s already has an owner with better evidence than a guess, so it is not looked up.', 'axle-leftovers' ),
+			'lookup_owned'        => __( '%s already has an owner with better evidence than a guess, so it is not looked up.', 'axle-leftovers' ),
 			/* translators: 1: item name, 2: number of characters. */
-			'lookup_short'       => __( '%1$s is too short to look up: names under %2$s characters match too much code.', 'axle-leftovers' ),
+			'lookup_short'        => __( '%1$s is too short to look up: names under %2$s characters match too much code.', 'axle-leftovers' ),
 			/* translators: %s: seconds. */
-			'lookup_wait'        => __( 'The lookup service allows few requests. Try again in %s seconds.', 'axle-leftovers' ),
+			'lookup_wait'         => __( 'The lookup service allows few requests. Try again in %s seconds.', 'axle-leftovers' ),
 			/* translators: %s: reason. */
-			'lookup_http'        => __( 'The lookup service did not answer as expected (%s).', 'axle-leftovers' ),
-			'lookup_limited'     => __( 'The lookup service says too many requests were sent. Try again in a minute.', 'axle-leftovers' ),
-			'lookup_bad'         => __( 'The lookup service sent an answer this plugin cannot read.', 'axle-leftovers' ),
-			'lookup_failed'      => __( 'The lookup service could not run the search.', 'axle-leftovers' ),
-			'lookup_pending'     => __( 'The search did not finish in time. Try again in a minute.', 'axle-leftovers' ),
-			'dataset_off'        => __( 'Downloading the full list is off. Turn it on in Settings first.', 'axle-leftovers' ),
+			'lookup_http'         => __( 'The lookup service did not answer as expected (%s).', 'axle-leftovers' ),
+			'lookup_limited'      => __( 'The lookup service says too many requests were sent. Try again in a minute.', 'axle-leftovers' ),
+			'lookup_bad'          => __( 'The lookup service sent an answer this plugin cannot read.', 'axle-leftovers' ),
+			'lookup_failed'       => __( 'The lookup service could not run the search.', 'axle-leftovers' ),
+			'lookup_pending'      => __( 'The search did not finish in time. Try again in a minute.', 'axle-leftovers' ),
+			'dataset_off'         => __( 'Downloading the full list is off. Turn it on in Settings first.', 'axle-leftovers' ),
 			/* translators: %s: reason. */
-			'dataset_http'       => __( 'Could not download the full list (%s).', 'axle-leftovers' ),
-			'dataset_large'      => __( 'The download is larger than the size limit, so it was discarded.', 'axle-leftovers' ),
-			'dataset_checksum'   => __( 'The download does not match its checksum, so it was discarded.', 'axle-leftovers' ),
-			'dataset_shape'      => __( 'The download is not a valid signature list, so it was discarded.', 'axle-leftovers' ),
-			'dataset_unpack'     => __( 'The download could not be unpacked, so it was discarded.', 'axle-leftovers' ),
-			'dataset_save'       => __( 'Could not save the list. Check that the uploads folder is writable.', 'axle-leftovers' ),
-			'nothing_to_restore' => __( 'Nothing in the trash matches.', 'axle-leftovers' ),
+			'dataset_http'        => __( 'Could not download the full list (%s).', 'axle-leftovers' ),
+			'dataset_large'       => __( 'The download is larger than the size limit, so it was discarded.', 'axle-leftovers' ),
+			'dataset_checksum'    => __( 'The download does not match its checksum, so it was discarded.', 'axle-leftovers' ),
+			'dataset_shape'       => __( 'The download is not a valid signature list, so it was discarded.', 'axle-leftovers' ),
+			'dataset_unpack'      => __( 'The download could not be unpacked, so it was discarded.', 'axle-leftovers' ),
+			'dataset_save'        => __( 'Could not save the list. Check that the uploads folder is writable.', 'axle-leftovers' ),
+			'nothing_to_restore'  => __( 'Nothing in the trash matches.', 'axle-leftovers' ),
+			/* translators: %s: plugin name. */
+			'reinstall_none'      => __( 'The trash holds nothing of %s to bring back.', 'axle-leftovers' ),
+			'reinstall_nothing'   => __( 'Nothing was picked, so nothing was restored.', 'axle-leftovers' ),
+			/* translators: 1: plugin name, 2: plugin slug. */
+			'reinstall_cli'       => __( '%1$s left data in the Leftovers trash. Activating it now would create empty tables and options under the same names. Run "wp axle-leftovers reinstall preview %2$s" to see it, "wp axle-leftovers reinstall restore %2$s" to bring it back, or "wp axle-leftovers reinstall skip %2$s" to start fresh, then activate again.', 'axle-leftovers' ),
+			'reinstall_undo_gone' => __( 'This restore cannot be undone any more: the entry was already undone, or the trashed copies were deleted.', 'axle-leftovers' ),
+			/* translators: %s: item name. */
+			'reinstall_swap'      => __( 'Could not put the current %s in the trash first, so the old data was not restored.', 'axle-leftovers' ),
 		);
 
 		/**

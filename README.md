@@ -47,6 +47,7 @@ Deleting a plugin runs its uninstall.php, if it has one. Many plugins have none,
 - **Plugins and Themes screen notice** after a delete: "Leftover Maker left 1 table, 5 options and 2 cron events. Review." and "Old Theme left 1 option and 14 template changes. Review."
 - **WP-CLI**, REST, abilities for agents, Site Health, privacy export and erase, multisite, Axle Read-Only Mode aware
 - **Attribute more Unknown items, opt-in**: Look it up searches the code of every WordPress.org plugin for an item's name (through veloria.dev), and Download the full list adds about 10,000 plugins from GitHub. Both are off by default and documented as external services
+- **A reinstalled plugin gets its data back**: install a deleted plugin again and Leftovers stops the activation at a preview of what the trash holds, restores it before the plugin creates empty tables, and shows both sides when the plugin already wrote its own. You choose per item, nothing the plugin wrote is replaced without that choice, and every restore has Undo
 
 ## Install
 
@@ -76,6 +77,8 @@ wp axle-leftovers list --type=posttype
 wp axle-leftovers show posttype event
 wp axle-leftovers trash posttype event --yes
 wp axle-leftovers restore 20261030-101500-k3xq   # if it was wrong
+wp axle-leftovers reinstall preview contact-form-7   # a deleted plugin came back
+wp axle-leftovers reinstall restore contact-form-7
 wp axle-leftovers trash purge --older-than=30 --yes
 ```
 
@@ -86,7 +89,7 @@ Or open Tools > Leftovers.
 <table>
   <tr>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-1.png" alt="By owner: what a deleted plugin or theme left, with the evidence, sizes, the autoload cost and the reference check"><br><sub>By owner: what a deleted plugin or theme left, with the evidence, sizes, the autoload cost and the reference check</sub></td>
-    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-2.png" alt="Moving an Unknown table to the trash needs its name typed"><br><sub>Moving an Unknown table to the trash needs its name typed</sub></td>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-2.png" alt="Unknown owner is the last card of By owner. Moving an Unknown table to the trash needs its name typed"><br><sub>Unknown owner is the last card of By owner. Moving an Unknown table to the trash needs its name typed</sub></td>
   </tr>
   <tr>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-3.png" alt="The trash: one batch, each item's export, and Restore"><br><sub>The trash: one batch, each item's export, and Restore</sub></td>
@@ -95,6 +98,9 @@ Or open Tools > Leftovers.
   <tr>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-5.png" alt="The notice on the Plugins screen after a delete"><br><sub>The notice on the Plugins screen after a delete</sub></td>
     <td width="50%" valign="top"><img src=".wordpress-org/screenshot-6.png" alt="A deleted theme: its settings, options, templates and styles, listed under its name"><br><sub>A deleted theme: its settings, options, templates and styles, listed under its name</sub></td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src=".wordpress-org/screenshot-7.png" alt="A plugin comes back: the trash holds its old data, and each table and option can be restored, kept as the plugin wrote it, or swapped, with Undo"><br><sub>A plugin comes back: the trash holds its old data, and each table and option can be restored, kept as the plugin wrote it, or swapped, with Undo</sub></td>
   </tr>
 </table>
 
@@ -169,7 +175,7 @@ Small plugins that each fill one gap in WordPress, all free with no pro version.
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-runtime-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Runtime Doctor](https://github.com/aryanjasala/axle-runtime-doctor) | Check OPcache coverage, the object cache, PHP support and limits, cron and more, with the fix for your host |
 | <img src="https://raw.githubusercontent.com/aryanjasala/axle-smoke-test/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Axle Smoke Test](https://github.com/aryanjasala/axle-smoke-test) | Check key pages after every update or deploy, see what broke and roll it back |
 | <img src="https://raw.githubusercontent.com/aryanjasala/block-doctor/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Doctor](https://github.com/aryanjasala/block-doctor) | Scan the site for broken blocks and fix them in bulk, with undo. See which posts use each block before you switch a plugin off |
-| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, see the diff, reset them, send them to Git, move them to another site or lock them |
+| <img src="https://raw.githubusercontent.com/aryanjasala/block-theme-ops/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Block Theme Ops](https://github.com/aryanjasala/block-theme-ops) | Find Site Editor changes that override your theme files, merge a theme update into them, reset them, send them to Git, move them to another site or lock them |
 | <img src="https://raw.githubusercontent.com/aryanjasala/role-right-sizer/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Role Right-Sizer](https://github.com/aryanjasala/role-right-sizer) | Recommends the smallest role each user needs, from what they actually do |
 | <img src="https://raw.githubusercontent.com/aryanjasala/update-rehearsal/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [Update Rehearsal](https://github.com/aryanjasala/update-rehearsal) | Try plugin, theme, core and PHP updates, a new plugin, or life without one, on a disposable copy of your site in WordPress Playground first |
 | <img src="https://raw.githubusercontent.com/aryanjasala/user-session-manager/main/.wordpress-org/icon-128x128.png" alt="" width="32"> | [User Session Manager](https://github.com/aryanjasala/user-session-manager) | See every device signed in, sign out one, and limit sessions per role |

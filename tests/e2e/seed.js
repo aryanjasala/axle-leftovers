@@ -81,12 +81,17 @@ function ensurePosts() {
 	}
 }
 
-/** Installs and activates Leftover Maker, which creates one of every item type. */
-function installMaker() {
-	ensurePosts();
+/** Copies Leftover Maker into the plugins folder without activating it. */
+function placeMaker() {
 	wpEval(
 		`$copy = function ( $from, $to ) use ( &$copy ) { wp_mkdir_p( $to ); foreach ( scandir( $from ) as $f ) { if ( "." === $f[0] ) { continue; } is_dir( "$from/$f" ) ? $copy( "$from/$f", "$to/$f" ) : copy( "$from/$f", "$to/$f" ); } }; $copy( ${ FIXTURES } . "/leftover-maker", WP_PLUGIN_DIR . "/leftover-maker" );`
 	);
+}
+
+/** Installs and activates Leftover Maker, which creates one of every item type. */
+function installMaker() {
+	ensurePosts();
+	placeMaker();
 	wp( 'plugin', 'activate', 'leftover-maker' );
 }
 
@@ -101,6 +106,25 @@ function makeLeftovers() {
 	installMaker();
 	uninstallMaker();
 	wp( 'axle-leftovers', 'scan' );
+}
+
+/** Leftover Maker with changed data, deleted, its leftovers trashed, and its files back in the plugins folder: a plugin about to be reinstalled. */
+function makeReinstall() {
+	resetAll();
+	installMaker();
+	wp( 'option', 'update', 'lm_settings', JSON.stringify( { mode: 'custom', items: 99 } ), '--format=json' );
+	wp( 'db', 'query', "INSERT INTO wp_lm_items (label, email) VALUES ('Item custom', 'custom@example.com')" );
+	uninstallMaker();
+	wp( 'axle-leftovers', 'scan' );
+	wp( 'axle-leftovers', 'trash', '--plugin=leftover-maker', '--yes' );
+	placeMaker();
+}
+
+/** The same, then activated again without restoring: the plugin wrote its own data over the same names. */
+function makeReinstallClash() {
+	makeReinstall();
+	wp( 'axle-leftovers', 'reinstall', 'skip', 'leftover-maker' );
+	wp( 'plugin', 'activate', 'leftover-maker' );
 }
 
 /** Removes Leftover Maker's folder from outside WordPress. */
@@ -140,7 +164,7 @@ function query( sql ) {
 function resetAll() {
 	succeeds( 'plugin', 'deactivate', 'leftover-maker' );
 	removeMakerOutside();
-	const options = [ ...MAKER_OPTIONS, 'redirection_options', 'axle_leftovers_scan', 'axle_leftovers_observed', 'axle_leftovers_settings', 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ];
+	const options = [ ...MAKER_OPTIONS, 'redirection_options', 'axle_leftovers_scan', 'axle_leftovers_observed', 'axle_leftovers_settings', 'alo_e2e_http_log', 'alo_e2e_last_term', 'alo_e2e_interval', 'alo_e2e_bad_checksum', 'axle_leftovers_lookups', 'axle_leftovers_dataset_meta', 'axle_leftovers_reinstall', 'lmx_unique_setting', 'lmx_shared_setting', 'lmx_nobody_setting', 'lmx_dataset_setting' ];
 	wpEval(
 		'global $wpdb; @unlink( WPMU_PLUGIN_DIR . "/lm-consumer.php" ); @unlink( WPMU_PLUGIN_DIR . "/axle-leftovers-mock-http.php" );' +
 			'foreach ( $wpdb->get_col( "SHOW TABLES" ) as $t ) { if ( preg_match( "/^wp_(lm|axlt|mystery|redirection)_/", $t ) ) { $wpdb->query( "DROP TABLE IF EXISTS `$t`" ); } }' +
@@ -334,6 +358,9 @@ module.exports = {
 	makeLookupItems,
 	httpLog,
 	installMaker,
+	makeReinstall,
+	makeReinstallClash,
+	placeMaker,
 	uninstallMaker,
 	makeLeftovers,
 	removeMakerOutside,
