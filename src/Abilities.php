@@ -45,16 +45,25 @@ final class Abilities implements Service {
 	private DatasetUpdater $updater;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall
+	 */
+	private Reinstall $reinstall;
+
+	/**
 	 * Sets up the abilities.
 	 *
-	 * @param Scanner             $scanner Scanner.
-	 * @param Trash               $trash   Trash.
-	 * @param DatasetUpdater|null $updater Downloaded list. Default: the stored one.
+	 * @param Scanner             $scanner   Scanner.
+	 * @param Trash               $trash     Trash.
+	 * @param DatasetUpdater|null $updater   Downloaded list. Default: the stored one.
+	 * @param Reinstall|null      $reinstall Reinstall restore. Default: a new one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash, ?DatasetUpdater $updater = null ) {
-		$this->scanner = $scanner;
-		$this->trash   = $trash;
-		$this->updater = $updater ?? new DatasetUpdater();
+	public function __construct( Scanner $scanner, Trash $trash, ?DatasetUpdater $updater = null, ?Reinstall $reinstall = null ) {
+		$this->scanner   = $scanner;
+		$this->trash     = $trash;
+		$this->updater   = $updater ?? new DatasetUpdater();
+		$this->reinstall = $reinstall ?? new Reinstall( $trash, new Inventory() );
 	}
 
 	/**
@@ -323,6 +332,92 @@ final class Abilities implements Service {
 			)
 		);
 
+		$plan_schema = array(
+			'type'       => 'object',
+			'properties' => array(
+				'plugins' => array( 'type' => 'array' ),
+				'plan'    => array( 'type' => 'array' ),
+			),
+		);
+		$this->ability(
+			'preview-reinstall',
+			__( 'Preview a reinstalled plugin\'s data', 'axle-leftovers' ),
+			__( 'Without a plugin: the installed plugins whose old data is in the trash. With one: what restoring each trashed item would do now (free, clashes with something the plugin wrote, identical, taken).', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'plugin' => array( 'type' => 'string' ),
+				),
+				'additionalProperties' => false,
+				'default'              => array(),
+			),
+			$plan_schema,
+			array( $this, 'preview_reinstall' ),
+			$permission,
+			array(
+				'readonly'    => true,
+				'destructive' => false,
+				'idempotent'  => true,
+			)
+		);
+
+		$this->ability(
+			'restore-reinstall',
+			__( 'Bring back a reinstalled plugin\'s data', 'axle-leftovers' ),
+			__( 'Restores the trashed data of an installed plugin. `items` maps a trash item ID to `restore` (nothing is in the way) or `use_old` (the plugin wrote its own; its current data goes to the trash first). Items not listed are left alone. Returns an `undo` ID.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'plugin' => array( 'type' => 'string' ),
+					'items'  => array( 'type' => 'object' ),
+				),
+				'required'             => array( 'plugin', 'items' ),
+				'additionalProperties' => false,
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'entry'  => array( 'type' => 'object' ),
+					'failed' => array( 'type' => 'array' ),
+				),
+			),
+			array( $this, 'restore_reinstall' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => false,
+			)
+		);
+
+		$this->ability(
+			'undo-reinstall',
+			__( 'Undo a reinstall restore', 'axle-leftovers' ),
+			__( 'Moves what a reinstall restore brought back into the trash again, and puts back what it replaced.', 'axle-leftovers' ),
+			array(
+				'type'                 => 'object',
+				'properties'           => array(
+					'id' => array( 'type' => 'string' ),
+				),
+				'required'             => array( 'id' ),
+				'additionalProperties' => false,
+			),
+			array(
+				'type'       => 'object',
+				'properties' => array(
+					'entry'  => array( 'type' => 'object' ),
+					'failed' => array( 'type' => 'array' ),
+				),
+			),
+			array( $this, 'undo_reinstall' ),
+			$permission,
+			array(
+				'readonly'    => false,
+				'destructive' => false,
+				'idempotent'  => false,
+			)
+		);
+
 		$this->ability(
 			'purge-trash',
 			__( 'Empty the trash', 'axle-leftovers' ),
@@ -445,6 +540,7 @@ final class Abilities implements Service {
 				'track_meta_keys' => array( 'type' => 'boolean' ),
 				'online_lookup'   => array( 'type' => 'boolean' ),
 				'remote_dataset'  => array( 'type' => 'boolean' ),
+				'reinstall_offer' => array( 'type' => 'boolean' ),
 				'observe_days'    => array(
 					'type'    => 'integer',
 					'minimum' => 1,
@@ -687,6 +783,53 @@ final class Abilities implements Service {
 		$input = (array) $input;
 
 		return $this->trash->restore( (string) ( $input['batch'] ?? '' ), (array) ( $input['items'] ?? array() ) );
+	}
+
+	/**
+	 * Previews a reinstalled plugin's data, or lists the plugins that have some waiting.
+	 *
+	 * @param mixed $input plugin.
+	 * @return array
+	 */
+	public function preview_reinstall( $input ) {
+		$slug = (string) ( ( (array) $input )['plugin'] ?? '' );
+
+		return '' === $slug ? array( 'plugins' => array_values( $this->reinstall->pending() ) ) : array( 'plan' => $this->reinstall->plan( $slug ) );
+	}
+
+	/**
+	 * Restores a reinstalled plugin's data.
+	 *
+	 * @param mixed $input plugin, items.
+	 * @return array|WP_Error
+	 */
+	public function restore_reinstall( $input ) {
+		$input  = (array) $input;
+		$picked = array();
+		foreach ( (array) ( $input['items'] ?? array() ) as $id => $choice ) {
+			$picked[ (int) $id ] = (string) $choice;
+		}
+		$result = $this->reinstall->restore( (string) ( $input['plugin'] ?? '' ), $picked, 'ability' );
+
+		return is_wp_error( $result ) ? $result : array(
+			'entry'  => Reinstall::public_entry( $result['entry'] ),
+			'failed' => $result['failed'],
+		);
+	}
+
+	/**
+	 * Undoes a reinstall restore.
+	 *
+	 * @param mixed $input id.
+	 * @return array|WP_Error
+	 */
+	public function undo_reinstall( $input ) {
+		$result = $this->reinstall->undo( (string) ( ( (array) $input )['id'] ?? '' ) );
+
+		return is_wp_error( $result ) ? $result : array(
+			'entry'  => Reinstall::public_entry( $result['entry'] ),
+			'failed' => $result['failed'],
+		);
 	}
 
 	/**

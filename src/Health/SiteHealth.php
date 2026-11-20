@@ -9,6 +9,7 @@ namespace AryanX\Axle\Leftovers\Health;
 
 use AryanX\Axle\Leftovers\Admin\Display;
 use AryanX\Axle\Leftovers\Admin\Page;
+use AryanX\Axle\Leftovers\Reinstall;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Service;
 
@@ -33,12 +34,21 @@ final class SiteHealth implements Service {
 	private Scanner $scanner;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall|null
+	 */
+	private ?Reinstall $reinstall;
+
+	/**
 	 * Sets up the test.
 	 *
-	 * @param Scanner $scanner Scanner.
+	 * @param Scanner        $scanner   Scanner.
+	 * @param Reinstall|null $reinstall Reinstall restore, to find plugins that came back.
 	 */
-	public function __construct( Scanner $scanner ) {
-		$this->scanner = $scanner;
+	public function __construct( Scanner $scanner, ?Reinstall $reinstall = null ) {
+		$this->scanner   = $scanner;
+		$this->reinstall = $reinstall;
 	}
 
 	/**
@@ -66,7 +76,50 @@ final class SiteHealth implements Service {
 			'test'  => array( $this, 'test_content' ),
 		);
 
+		if ( $this->reinstall ) {
+			$tests['direct']['axle_leftovers_reinstall'] = array(
+				'label' => __( 'Plugins that came back did not lose their old data', 'axle-leftovers' ),
+				'test'  => array( $this, 'test_reinstall' ),
+			);
+		}
+
 		return $tests;
+	}
+
+	/**
+	 * Installed plugins whose old data is still in the trash and was never looked at.
+	 *
+	 * @return array
+	 */
+	public function test_reinstall(): array {
+		$waiting = array();
+		foreach ( $this->reinstall ? $this->reinstall->pending() : array() as $entry ) {
+			if ( '' === $entry['decision'] ) {
+				$waiting[] = $entry['name'];
+			}
+		}
+
+		$result = array(
+			'label'       => __( 'Plugins that came back did not lose their old data', 'axle-leftovers' ),
+			'status'      => 'good',
+			'badge'       => array(
+				'label' => __( 'Performance', 'axle-leftovers' ),
+				'color' => 'blue',
+			),
+			'description' => '<p>' . esc_html__( 'No installed plugin has data waiting in the Leftovers trash.', 'axle-leftovers' ) . '</p>',
+			'actions'     => '',
+			'test'        => 'axle_leftovers_reinstall',
+		);
+		if ( $waiting ) {
+			/* translators: %s: plugin names. */
+			$result['label']          = sprintf( __( 'The trash holds settings and tables of plugins that are installed again: %s', 'axle-leftovers' ), implode( ', ', $waiting ) );
+			$result['status']         = 'recommended';
+			$result['badge']['color'] = 'orange';
+			$result['description']    = '<p>' . esc_html__( 'These plugins were deleted, their leftovers were moved to the trash, and now they are installed again. They may have started from scratch. Leftovers can show what is in the trash and bring it back, and nothing the plugin wrote since is replaced unless you choose it.', 'axle-leftovers' ) . '</p>';
+			$result['actions']        = '<p><a href="' . esc_url( Page::url() ) . '">' . esc_html__( 'Review them in Tools > Leftovers', 'axle-leftovers' ) . '</a></p>';
+		}
+
+		return $result;
 	}
 
 	/**

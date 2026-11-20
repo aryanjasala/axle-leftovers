@@ -418,6 +418,64 @@ class Trash {
 	}
 
 	/**
+	 * Moves one live item to the trash without the scan checks. For code that
+	 * knows exactly what it is moving and why: Leftovers' own reinstall restore
+	 * (the data a plugin wrote since it came back, kept before old data replaces it)
+	 * and its Undo. It still exports first, honours the freeze and fires the trash actions.
+	 *
+	 * @param string $type       Item type.
+	 * @param string $name       Item name.
+	 * @param string $owner      Owner slug.
+	 * @param string $confidence Confidence of the owner.
+	 * @return array|WP_Error The trash row.
+	 */
+	public function swap_out( string $type, string $name, string $owner, string $confidence = 'certain' ) {
+		if ( self::frozen() ) {
+			return self::frozen_error();
+		}
+		if ( ! isset( Settings::item_types()[ $type ] ) || Core::is_protected( $type, $name ) ) {
+			return new WP_Error( 'axle_leftovers_protected', Messages::get( 'protected', $name ) );
+		}
+		if ( ! $this->exists( $type, $name ) ) {
+			return new WP_Error( 'axle_leftovers_missing', Messages::get( 'missing', $name ) );
+		}
+
+		$scope = 'sitemeta' === $type ? 'network' : 'site';
+		$bytes = 0;
+		if ( 'table' === $type ) {
+			$bytes = (int) ( $this->inventory->table_stats( array( $name ) )[ $name ]['bytes'] ?? 0 );
+		}
+		$item  = array(
+			'id'         => $type . ':' . $name,
+			'type'       => $type,
+			'name'       => $name,
+			'scope'      => $scope,
+			'owner'      => $owner,
+			'confidence' => $confidence,
+			'bytes'      => $bytes,
+			'rows'       => 0,
+		);
+		$batch = gmdate( 'Ymd-His' ) . '-' . strtolower( wp_generate_password( 4, false ) );
+
+		/** This action is documented in src/Trash.php */
+		do_action( 'axle_leftovers_before_trash', array( $item ), $batch );
+
+		$row = $this->trash_one( $item, $batch, get_current_user_id() );
+		if ( is_wp_error( $row ) ) {
+			/** This action is documented in src/Trash.php */
+			do_action( 'axle_leftovers_trash_failed', $item, $row, $batch );
+
+			return $row;
+		}
+		$this->scanner->forget( array( $item ) );
+
+		/** This action is documented in src/Trash.php */
+		do_action( 'axle_leftovers_trashed', $batch, array( $row ) );
+
+		return $row;
+	}
+
+	/**
 	 * Deletes trashed items for good.
 	 *
 	 * @param array $args older_than (days; null for all), batch, due_only (only items past their purge date).

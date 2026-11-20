@@ -40,12 +40,14 @@
 	margin-left: 4px;
 }
 
-.alo-evidence {
+.alo-evidence,
+.alo-why-list {
 	margin: 4px 0 0 16px;
 	list-style: disc;
 }
 
-.alo-evidence li {
+.alo-evidence li,
+.alo-why-list li {
 	margin: 0;
 }
 
@@ -98,10 +100,83 @@
 	margin-left: 20px;
 }
 
+/* Evidence sits in its own column on wide screens, and under the item's name below 782 px. */
+.alo-why-inline {
+	display: none;
+	margin-top: 4px;
+}
+
+.alo-evidence--card {
+	margin-bottom: 8px;
+}
+
+.alo-views::after {
+	content: "";
+	display: block;
+	clear: both;
+}
+
+.alo-views .subsubsub {
+	margin: 0 0 8px;
+}
+
+.alo-refcheck {
+	margin: 8px 0 0;
+}
+
+.alo-media-note {
+	margin: 4px 0 0;
+	max-width: 60ch;
+}
+
+.alo-unknown-card {
+	margin-top: 16px;
+}
+
+.alo-reinstall-title {
+	margin: 8px 0;
+}
+
+.alo-reinstall-others {
+	margin-top: 8px;
+}
+
+.alo-choice {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.alo-restored-list {
+	margin: 0;
+}
+
+.alo-restored-list li {
+	margin: 0 0 8px;
+}
+
+.alo-ledger-link {
+	margin-top: 16px;
+}
+
+.alo-reinstall-card .axle-actions,
+.alo-reinstall-others {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+}
+
 @media screen and (max-width: 782px) {
 	.alo-items td:nth-child(3),
-	.alo-items th:nth-child(3) {
+	.alo-items th:nth-child(3),
+	.alo-items .alo-why-cell,
+	.alo-items .alo-ref-cell {
 		display: none;
+	}
+
+	.alo-items .alo-why-inline {
+		display: block;
 	}
 }
 
@@ -143,4 +218,21 @@
 
 .alo-watching {
 	margin: 12px 0;
+}
+
+.alo-reinstall-items {
+	table-layout: fixed;
+	min-width: 640px;
+}
+
+.alo-reinstall-items th:first-child {
+	width: 24%;
+}
+
+.alo-reinstall-items th:last-child {
+	width: 28%;
+}
+
+.alo-reinstall-items td {
+	overflow-wrap: anywhere;
 }

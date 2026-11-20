@@ -41,6 +41,7 @@ function axle_leftovers_uninstall_site(): void {
 	delete_option( 'axle_leftovers_db_version' );
 	delete_option( 'axle_leftovers_lookups' );
 	delete_option( 'axle_leftovers_dataset_meta' );
+	delete_option( 'axle_leftovers_reinstall' );
 
 	// Per-user notices and messages that may still be waiting.
 	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- One-off cleanup on uninstall.

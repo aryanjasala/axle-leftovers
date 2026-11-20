@@ -123,6 +123,10 @@ For an Unknown item (or a Guess), Look it up sends one private search with the i
 | `axle_leftovers_notice_message` | `string $message, string $slug, array $counts` | "Acme left 2 tables and 12 options." or "Old Theme left 1 option and 14 template changes." (`$slug` is `theme:<folder>` for a theme) |
 | `axle_leftovers_track_meta_keys` | `bool $track, string $meta_type` | true, from Settings |
 | `axle_leftovers_messages` | `array $messages` | every refusal and error; a template must keep its placeholders |
+| `axle_leftovers_reinstall_mode` | `string $mode, string $slug` | `ask`, or `off` when Settings > Reinstalls is off. `ask` stops an activation on the screen at a preview (and WP-CLI with the commands to run), `restore` brings back what clashes with nothing, with no question, `off` does nothing |
+| `axle_leftovers_reinstall_hide_value` | `bool $hide, string $name` | true for names that look like a key, secret, token, password, salt, licence or auth: the preview shows a length, not the value |
+| `axle_leftovers_reinstall_preview_length` | `int $length` | 160 (20 to 2000) characters of a value in the preview |
+| `axle_leftovers_reinstall_log_size` | `int $size` | 20 (1 to 200) restores kept for Undo |
 
 Example: never touch anything named `legacy_*`.
 
@@ -156,6 +160,10 @@ add_filter( 'axle_leftovers_can_trash', function ( $allowed, $item ) {
 | `axle_leftovers_lookup_done` | `array $result, string $type, string $name` (also when nothing matched) |
 | `axle_leftovers_dataset_downloaded` | `array $meta` (built, count, fetched_gmt, size, sha256) |
 | `axle_leftovers_dataset_removed` | (the downloaded list was deleted) |
+| `axle_leftovers_reinstall_detected` | `string $slug, array $counts, string $context` (a plugin is about to be activated and the trash holds data it left; context is screen, cli or other) |
+| `axle_leftovers_reinstall_restored` | `array $entry` (id, slug, gmt, user, source, restored, swapped). The items also fire `axle_leftovers_restored`, and the data put in the trash first fires `axle_leftovers_trashed`, with the same arguments as always |
+| `axle_leftovers_reinstall_undone` | `array $entry` |
+| `axle_leftovers_reinstall_decided` | `string $slug, string $state` (skipped, handled, dismissed, or empty when forgotten) |
 
 Example: log every trash in your own audit log.
 
@@ -172,6 +180,7 @@ add_action( 'axle_leftovers_trashed', function ( $batch, $rows ) {
 | `axleLeftovers.confirmMessage` | filter | `message, { items }` |
 | `axleLeftovers.trashed` | action | `{ batch, items }` |
 | `axleLeftovers.restored` | action | `{ restored, failed }` |
+| `axleLeftovers.reinstalled` | action | `{ id }` (after a reinstall restore, with its Undo ID) |
 
 ```js
 wp.hooks.addFilter( 'axleLeftovers.confirmMessage', 'my-plugin', ( message, { items } ) => `${ message }\n\nTake a backup first?` );
@@ -201,12 +210,15 @@ $who = \AryanX\Axle\Leftovers\owner_of( 'option', 'acme_settings' );
 | `axle-leftovers/update-settings` | not readonly, idempotent | any of the settings |
 | `axle-leftovers/download-dataset` | not readonly, idempotent | |
 | `axle-leftovers/delete-dataset` | destructive, idempotent | |
+| `axle-leftovers/preview-reinstall` | readonly | `plugin` (empty: installed plugins with data in the trash) |
+| `axle-leftovers/restore-reinstall` | not readonly, not destructive | `plugin`, `items` (trash item ID => `restore` or `use_old`); returns an `undo` ID in `entry.id` |
+| `axle-leftovers/undo-reinstall` | not readonly, not destructive | `id` |
 
 Permission: the `axle_leftovers_capability` capability, plus the capability of each item's type (see `axle_leftovers_item_capability`) and the network capability for network items. A user without them does not see those items and cannot trash or restore them. Items carry `owner_kind` (plugin, theme or mu-plugin).
 
 ## REST
 
-`axle-leftovers/v1`: `GET /items` (`plugin`, `theme`, `kind`, `type`, `confidence`), `GET /trash`, `POST /trash` (`items`, `confirm_names`), `DELETE /trash` (`older_than`, `batch`), `POST /restore` (`batch`, `items`), `POST /scan`, `GET /content` (`type`, `name`: one post type or taxonomy item with its summary), `GET /observation`, `GET /notice`. Same capability.
+`axle-leftovers/v1`: `GET /items` (`plugin`, `theme`, `kind`, `type`, `confidence`), `GET /trash`, `POST /trash` (`items`, `confirm_names`), `DELETE /trash` (`older_than`, `batch`), `POST /restore` (`batch`, `items`), `POST /scan`, `GET /content` (`type`, `name`: one post type or taxonomy item with its summary), `GET /reinstall` (`plugin`), `POST /reinstall/restore` (`plugin`, `items`), `POST /reinstall/undo` (`id`), `GET /observation`, `GET /notice`. Same capability.
 
 ## WP-CLI
 
@@ -225,10 +237,12 @@ Permission: the `axle_leftovers_capability` capability, plus the capability of e
 | `wp axle-leftovers lookup <type> <name> [--refresh] [--format=]` | Online lookup of an Unknown item (needs the setting) |
 | `wp axle-leftovers settings [list\|get <key>\|set <key> <value>]` | The settings |
 | `wp axle-leftovers dataset download\|status\|delete` | The full signature list (download needs the setting) |
+| `wp axle-leftovers reinstall list\|preview <plugin>\|restore <plugin> [--use-old=<names>]\|skip <plugin>\|undo <id>` | A reinstalled plugin's data: what the trash holds, restore it (what clashes stays unless named in `--use-old`), start fresh, or undo |
 
 ## Site Health
 
 - Recommended: options left by deleted plugins add more than 100 KB of autoloaded data to every request.
+- Recommended: an installed plugin has data waiting in the trash that nobody has looked at (it may have started from scratch).
 - Recommended: posts or terms belong to post types and taxonomies nothing registers any more.
 
 ## Data and privacy
@@ -236,6 +250,7 @@ Permission: the `axle_leftovers_capability` capability, plus the capability of e
 - Table `{prefix}axle_leftovers_ledger`: plugins and themes (as `theme:<folder>`) seen, their version, removal, sources and code signature.
 - Table `{prefix}axle_leftovers_seen`: item type, name, owner, first seen, evidence. One row per distinct name.
 - Table `{prefix}axle_leftovers_trash`: one row per trashed item: batch, type, name, owner, confidence, payload, locations, size, export, user, dates, status.
+- Option `axle_leftovers_reinstall` (not autoloaded): decisions per plugin (skipped, handled, dismissed) and the last restores with their Undo data. The user who restored is anonymised by the eraser and listed by the exporter.
 - Option `axle_leftovers_observed`: when each kind of request was first and last seen, and when each post type and taxonomy was last seen registered (autoloaded, a few KB).
 - Options `axle_leftovers_settings`, `axle_leftovers_scan` (cached results, not autoloaded), `axle_leftovers_lookups` (cached online lookups, not autoloaded), `axle_leftovers_dataset_meta` (date and count of the downloaded list, not autoloaded), `axle_leftovers_db_version`.
 - User meta `axle_leftovers_steps_dismissed`: set when a user hides the Get started card. It holds no personal data and is removed on uninstall.
@@ -245,6 +260,16 @@ Permission: the `axle_leftovers_capability` capability, plus the capability of e
 Deleting Leftovers while the trash holds items deletes them for good, so the Plugins screen shows a warning under its row while the trash is not empty.
 
 The privacy exporter lists the items a user trashed, and trashed post type batches that hold posts they wrote or comments they left (matched by user ID, or by a one-way hash of the comment email stored in the trash row). The eraser purges trashed batches that hold the user's meta, posts or comments, and removes the user from trash records. Uninstall purges the trash (or restores it, with the filter), then removes the tables, options, cron events, transients and folder.
+
+## A reinstalled plugin gets its data back
+
+When a plugin whose items are in the trash is activated again, Leftovers acts on `activate_plugin`, before the plugin's code and activation hook run. Activation would create empty tables and options under the same names, and a restore is refused after that.
+
+- On the screen the activation stops at a preview (`Tools > Leftovers`, with `reinstall=<slug>`). Each item is free (restores as it was), a clash (the plugin already wrote its own; both sides are shown), identical, taken (stays in the trash) or gone. Free items are checked. A clash keeps what the plugin wrote unless you pick the old data for that item, and then the current data goes to the trash first. Buttons: Restore selected and activate, Activate without restoring.
+- In WP-CLI the activation stops with the commands to run. `wp axle-leftovers reinstall restore <plugin>` then `wp plugin activate <plugin>`.
+- On AJAX, REST and cron requests, and with the `restore` mode, only what clashes with nothing is restored.
+- If the plugin is active already (it started from scratch), By owner and the Plugins screen offer the same preview. Clashes of tables and options can be chosen item by item. Other clashes stay in the trash.
+- Every restore is logged and has Undo (a link on the notice, on By owner and on the Plugins screen, or `reinstall undo <id>`): what came back goes into the trash again, and what it replaced comes back. Trashed posts of a removed post type: the media attached to them stayed in the Media Library with a missing parent until the posts are restored.
 
 ## Limits in 1.0
 
@@ -257,3 +282,5 @@ The privacy exporter lists the items a user trashed, and trashed post type batch
 - A capability granted to single users (not through a role) is not removed.
 - The dataset lists every name a plugin's code mentions, including names it reads from other plugins (importers), so a dataset match is Likely, not Certain.
 - Folder moves need the trash folder on the same file system as uploads.
+- A reinstall restore reads the trash by plugin folder name: a plugin that comes back under another folder is not matched. Themes are not covered.
+- Only tables and options can be chosen item by item when they clash. Cron events, roles, capabilities, meta, folders, posts and terms that exist again stay in the trash.

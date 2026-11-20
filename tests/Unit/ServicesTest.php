@@ -59,11 +59,14 @@ final class ServicesTest extends LeftoversTestCase {
 			},
 			$registered
 		);
-		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/get-observation', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/get-settings', 'axle-leftovers/update-settings', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
+		$this->assertSame( array( 'axle-leftovers/list-leftovers', 'axle-leftovers/get-item', 'axle-leftovers/get-observation', 'axle-leftovers/list-trash', 'axle-leftovers/trash-items', 'axle-leftovers/restore-items', 'axle-leftovers/preview-reinstall', 'axle-leftovers/restore-reinstall', 'axle-leftovers/undo-reinstall', 'axle-leftovers/purge-trash', 'axle-leftovers/rescan', 'axle-leftovers/lookup-item', 'axle-leftovers/get-settings', 'axle-leftovers/update-settings', 'axle-leftovers/download-dataset', 'axle-leftovers/delete-dataset' ), array_keys( $registered ) );
 		$this->assertTrue( $annotations['axle-leftovers/list-leftovers']['readonly'] );
 		$this->assertTrue( $annotations['axle-leftovers/trash-items']['destructive'] );
 		$this->assertTrue( $annotations['axle-leftovers/purge-trash']['destructive'] );
 		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => true ), $annotations['axle-leftovers/restore-items'] );
+		$this->assertTrue( $annotations['axle-leftovers/preview-reinstall']['readonly'] );
+		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ), $annotations['axle-leftovers/restore-reinstall'] );
+		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => false ), $annotations['axle-leftovers/undo-reinstall'] );
 		$this->assertFalse( $annotations['axle-leftovers/rescan']['readonly'] );
 		$this->assertTrue( $registered['axle-leftovers/rescan']['meta']['mcp']['public'] );
 		$this->assertSame( array( 'readonly' => false, 'destructive' => false, 'idempotent' => true ), $annotations['axle-leftovers/lookup-item'] );

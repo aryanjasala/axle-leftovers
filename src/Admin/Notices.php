@@ -7,6 +7,8 @@
 
 namespace AryanX\Axle\Leftovers\Admin;
 
+use AryanX\Axle\Leftovers\Inventory;
+use AryanX\Axle\Leftovers\Reinstall;
 use AryanX\Axle\Leftovers\Scanner;
 use AryanX\Axle\Leftovers\Service;
 use AryanX\Axle\Leftovers\Settings;
@@ -37,14 +39,23 @@ final class Notices implements Service {
 	private Trash $trash;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall
+	 */
+	private Reinstall $reinstall;
+
+	/**
 	 * Sets up the notices.
 	 *
-	 * @param Scanner $scanner Scanner.
-	 * @param Trash   $trash   Trash.
+	 * @param Scanner        $scanner   Scanner.
+	 * @param Trash          $trash     Trash.
+	 * @param Reinstall|null $reinstall Reinstall restore. Default: a new one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash ) {
-		$this->scanner = $scanner;
-		$this->trash   = $trash;
+	public function __construct( Scanner $scanner, Trash $trash, ?Reinstall $reinstall = null ) {
+		$this->scanner   = $scanner;
+		$this->trash     = $trash;
+		$this->reinstall = $reinstall ?? new Reinstall( $trash, new Inventory() );
 	}
 
 	/**
@@ -52,8 +63,43 @@ final class Notices implements Service {
 	 */
 	public function register(): void {
 		add_action( 'admin_notices', array( $this, 'deleted_notice' ) );
+		add_action( 'admin_notices', array( $this, 'reinstall_notice' ) );
 		add_action( 'admin_footer-plugins.php', array( $this, 'deactivation_dialog' ) );
 		add_action( 'after_plugin_row_' . plugin_basename( PLUGIN_FILE ), array( $this, 'trash_row_warning' ), 10, 0 );
+	}
+
+	/**
+	 * On the Plugins screen: a plugin that is installed has data waiting in the trash, and a restore that can be undone.
+	 */
+	public function reinstall_notice(): void {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! $screen || 'plugins' !== $screen->id || ! current_user_can( Settings::capability() ) ) {
+			return;
+		}
+
+		foreach ( $this->reinstall->pending() as $entry ) {
+			if ( '' !== $entry['decision'] ) {
+				continue;
+			}
+			/* translators: 1: plugin name, 2: list such as "2 tables and 3 options". */
+			$text = sprintf( __( '%1$s is installed and the Leftovers trash holds what it left before: %2$s. It may have started from scratch.', 'axle-leftovers' ), $entry['name'], Display::count_list( $entry['counts'] ) );
+			echo '<div class="notice notice-warning alo-reinstall-notice" data-plugin="' . esc_attr( $entry['slug'] ) . '"><p>' . esc_html( $text ) . ' <a href="' . esc_url( Reinstall::screen_url( $entry['slug'] ) ) . '">' . esc_html__( 'Preview and restore', 'axle-leftovers' ) . '</a></p></div>';
+		}
+
+		foreach ( $this->reinstall->undoable( get_current_user_id() ) as $entry ) {
+			$time = strtotime( (string) $entry['gmt'] . ' UTC' );
+			if ( ! $time || $time < time() - 10 * MINUTE_IN_SECONDS ) {
+				continue;
+			}
+			/* translators: 1: plugin slug, 2: number of items. */
+			$text = sprintf( _n( 'Brought back %2$s item for %1$s.', 'Brought back %2$s items for %1$s.', count( (array) $entry['restored'] ), 'axle-leftovers' ), $entry['slug'], number_format_i18n( count( (array) $entry['restored'] ) ) );
+			echo '<div class="notice notice-success alo-restored-notice"><p>' . esc_html( $text );
+			echo ' <form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="alo-inline-form">';
+			echo '<input type="hidden" name="action" value="' . esc_attr( Page::ACTION ) . '"><input type="hidden" name="do" value="reinstall_undo">';
+			echo '<input type="hidden" name="id" value="' . esc_attr( (string) $entry['id'] ) . '"><input type="hidden" name="redirect" value="' . esc_url( self_admin_url( 'plugins.php' ) ) . '">';
+			wp_nonce_field( Page::NONCE );
+			echo '<button type="submit" class="button-link">' . esc_html__( 'Undo', 'axle-leftovers' ) . '</button></form></p></div>';
+		}
 	}
 
 	/**

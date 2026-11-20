@@ -152,6 +152,21 @@ final class TrashTest extends LeftoversTestCase {
 		$this->assertSame( 'restored', $this->db->tables['wp_axle_leftovers_trash'][1]['status'] );
 	}
 
+	public function test_swap_out_keeps_the_trash_actions_and_their_arguments(): void {
+		Actions\expectDone( 'axle_leftovers_before_trash' )->once()->with( \Mockery::on( static function ( $items ) {
+			return 'cron' === $items[0]['type'] && 'acme_sync' === $items[0]['name'];
+		} ), \Mockery::type( 'string' ) );
+		Actions\expectDone( 'axle_leftovers_trashed' )->once()->with( \Mockery::type( 'string' ), \Mockery::on( static function ( $rows ) {
+			return 1 === count( $rows ) && 'acme_sync' === $rows[0]['name'] && 'trashed' === $rows[0]['status'] && 'acme' === $rows[0]['owner_slug'];
+		} ) );
+
+		$row = $this->trash()->swap_out( 'cron', 'acme_sync', 'acme' );
+
+		$this->assertIsArray( $row );
+		$this->assertArrayNotHasKey( 'acme_sync', $this->cron );
+		$this->assertInstanceOf( \WP_Error::class, $this->trash()->swap_out( 'cron', 'acme_sync', 'acme' ), 'A missing item is refused.' );
+	}
+
 	public function test_a_failed_export_rolls_back_and_fires_trash_failed(): void {
 		$this->storage->shouldReceive( 'put' )->andReturn( false );
 		Actions\expectDone( 'axle_leftovers_trash_failed' )->once()->with( \Mockery::type( 'array' ), \Mockery::type( \WP_Error::class ), \Mockery::type( 'string' ) );

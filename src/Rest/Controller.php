@@ -9,6 +9,8 @@ namespace AryanX\Axle\Leftovers\Rest;
 
 use AryanX\Axle\Leftovers\Admin\Notices;
 use AryanX\Axle\Leftovers\Content;
+use AryanX\Axle\Leftovers\Inventory;
+use AryanX\Axle\Leftovers\Reinstall;
 use AryanX\Axle\Leftovers\Messages;
 use AryanX\Axle\Leftovers\Observer;
 use AryanX\Axle\Leftovers\Scanner;
@@ -45,14 +47,23 @@ final class Controller implements Service {
 	private Trash $trash;
 
 	/**
+	 * The reinstall restore.
+	 *
+	 * @var Reinstall
+	 */
+	private Reinstall $reinstall;
+
+	/**
 	 * Sets up the routes.
 	 *
-	 * @param Scanner $scanner Scanner.
-	 * @param Trash   $trash   Trash.
+	 * @param Scanner        $scanner   Scanner.
+	 * @param Trash          $trash     Trash.
+	 * @param Reinstall|null $reinstall Reinstall restore. Default: a new one.
 	 */
-	public function __construct( Scanner $scanner, Trash $trash ) {
-		$this->scanner = $scanner;
-		$this->trash   = $trash;
+	public function __construct( Scanner $scanner, Trash $trash, ?Reinstall $reinstall = null ) {
+		$this->scanner   = $scanner;
+		$this->trash     = $trash;
+		$this->reinstall = $reinstall ?? new Reinstall( $trash, new Inventory() );
 	}
 
 	/**
@@ -168,6 +179,52 @@ final class Controller implements Service {
 		);
 		register_rest_route(
 			self::NAMESPACE,
+			'/reinstall',
+			array(
+				'methods'             => WP_REST_Server::READABLE,
+				'callback'            => array( $this, 'reinstall_list' ),
+				'permission_callback' => array( $this, 'permission' ),
+				'args'                => array(
+					'plugin' => array( 'type' => 'string' ),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/reinstall/restore',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'reinstall_restore' ),
+				'permission_callback' => array( $this, 'permission' ),
+				'args'                => array(
+					'plugin' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+					'items'  => array(
+						'type'     => 'object',
+						'required' => true,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
+			'/reinstall/undo',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'reinstall_undo' ),
+				'permission_callback' => array( $this, 'permission' ),
+				'args'                => array(
+					'id' => array(
+						'type'     => 'string',
+						'required' => true,
+					),
+				),
+			)
+		);
+		register_rest_route(
+			self::NAMESPACE,
 			'/scan',
 			array(
 				'methods'             => WP_REST_Server::CREATABLE,
@@ -272,6 +329,56 @@ final class Controller implements Service {
 		$result = $this->trash->restore( (string) $request->get_param( 'batch' ), (array) $request->get_param( 'items' ) );
 
 		return is_wp_error( $result ) ? $result : new WP_REST_Response( $result );
+	}
+
+	/**
+	 * GET /reinstall: installed plugins with data in the trash, or one plugin's preview.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function reinstall_list( WP_REST_Request $request ): WP_REST_Response {
+		$slug = (string) $request->get_param( 'plugin' );
+
+		return new WP_REST_Response( '' === $slug ? array( 'plugins' => array_values( $this->reinstall->pending() ) ) : array( 'plan' => $this->reinstall->plan( $slug ) ) );
+	}
+
+	/**
+	 * POST /reinstall/restore.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function reinstall_restore( WP_REST_Request $request ) {
+		$picked = array();
+		foreach ( (array) $request->get_param( 'items' ) as $id => $choice ) {
+			$picked[ (int) $id ] = (string) $choice;
+		}
+		$result = $this->reinstall->restore( (string) $request->get_param( 'plugin' ), $picked, 'rest' );
+
+		return is_wp_error( $result ) ? $result : new WP_REST_Response(
+			array(
+				'entry'  => Reinstall::public_entry( $result['entry'] ),
+				'failed' => $result['failed'],
+			)
+		);
+	}
+
+	/**
+	 * POST /reinstall/undo.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
+	 */
+	public function reinstall_undo( WP_REST_Request $request ) {
+		$result = $this->reinstall->undo( (string) $request->get_param( 'id' ) );
+
+		return is_wp_error( $result ) ? $result : new WP_REST_Response(
+			array(
+				'entry'  => Reinstall::public_entry( $result['entry'] ),
+				'failed' => $result['failed'],
+			)
+		);
 	}
 
 	/**

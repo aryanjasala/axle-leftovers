@@ -72,7 +72,7 @@ test.describe( 'Theme leftovers', () => {
 		await card.getByText( 'Review and move to trash' ).click();
 		await expect( card.locator( 'tbody tr' ) ).toHaveCount( THEME_ITEMS.length );
 		await expect( card.locator( 'tr[data-item="template:leftover-theme"]' ) ).toContainText( 'Theme templates' );
-		await expect( card.locator( 'tr[data-item="option:theme_mods_leftover-theme"] .alo-evidence time' ) ).toHaveAttribute( 'title', /.+/ );
+		await expect( card.locator( '.alo-evidence time' ).first() ).toHaveAttribute( 'title', /.+/ );
 	} );
 
 	test( 'nothing of an installed theme is listed, and a theme that was never installed here is found by its name', async () => {

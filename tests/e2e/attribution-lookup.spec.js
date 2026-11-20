@@ -70,7 +70,7 @@ test.describe( 'Online lookup and the full list', () => {
 		expect( Object.values( cached )[ 0 ] ).toMatchObject( { confidence: 'likely', total: 1 } );
 
 		// The item left the Unknown tab and sits on Acme Widgets' card.
-		await expect( row( page, 'lmx_unique_setting' ) ).toHaveCount( 0 );
+		await expect( page.locator( '#alo-unknown-card' ).locator( 'tr[data-item="option:lmx_unique_setting"]' ) ).toHaveCount( 0 );
 		await page.getByRole( 'link', { name: /By owner/ } ).click();
 		const card = page.locator( '.alo-card[data-owner="acme-widgets"]' );
 		await expect( card ).toContainText( 'Acme Widgets' );
