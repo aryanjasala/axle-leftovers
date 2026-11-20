@@ -236,3 +236,25 @@
 .alo-reinstall-items td {
 	overflow-wrap: anywhere;
 }
+
+/* The deactivation warning sits in the plugins table: let it wrap on a phone. */
+#alo-deactivate {
+	box-sizing: border-box;
+	max-width: 100%;
+}
+
+#alo-deactivate .axle-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 16px;
+}
+
+.alo-confirm-row--block {
+	margin: 8px 0;
+}
+
+/* Screen-reader text inside a wide table is positioned absolutely, and without a positioned scroll box it can sit outside it and widen the page on older WordPress. */
+.axle-ui .axle-scroll {
+	position: relative;
+}

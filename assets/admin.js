@@ -290,14 +290,38 @@
 			link.focus();
 		}
 
+		const narrow = window.matchMedia ? window.matchMedia( '(max-width: 782px)' ) : null;
+
+		/** Puts the panel in a row under the plugin, or above the table on a phone: core stacks the cells there, and a wide extra row makes the page scroll sideways. */
+		function place() {
+			if ( holder ) {
+				holder.remove();
+			}
+			if ( narrow && narrow.matches ) {
+				holder = element( 'div', { class: 'alo-confirm-row alo-confirm-row--block axle-ui' } );
+				holder.appendChild( panel );
+				row.closest( 'table' ).insertAdjacentElement( 'beforebegin', holder );
+			} else {
+				holder = element( 'tr', { class: 'alo-confirm-row' } );
+				const cell = element( 'td', { colspan: String( row.children.length ), class: 'axle-ui' } );
+				holder.appendChild( cell );
+				cell.appendChild( panel );
+				row.insertAdjacentElement( 'afterend', holder );
+			}
+		}
+
+		if ( narrow && narrow.addEventListener ) {
+			narrow.addEventListener( 'change', () => {
+				if ( holder ) {
+					place();
+				}
+			} );
+		}
+
 		link.addEventListener( 'click', ( event ) => {
 			event.preventDefault();
 			panel.querySelector( '.alo-deactivate-anyway' ).setAttribute( 'href', link.getAttribute( 'href' ) );
-			holder = element( 'tr', { class: 'alo-confirm-row' } );
-			const cell = element( 'td', { colspan: String( row.children.length ), class: 'axle-ui' } );
-			holder.appendChild( cell );
-			cell.appendChild( panel );
-			row.insertAdjacentElement( 'afterend', holder );
+			place();
 			panel.hidden = false;
 			speak( panel.querySelector( 'p' ).textContent );
 			panel.querySelector( '#alo-deactivate-title' ).focus();
